@@ -9,7 +9,8 @@ trigger: always_on
 2. **Panic Safety:** The C-ABI boundary (VST3/CLAP entry points) must capture panics to prevent crashing the host DAW.
 3. **Testing:** Every module must include a `test` module. If a component requires a window, create a "Headless" mock or use the RPC server for verification.
 4. **Build System:** Use `cargo-xtask` to manage the complex "polyglot" build process (Rust compilation, Shader compilation, Bundle creation, Codesigning) within the Rust ecosystem.17 
-5. For any questions you need clarificaiton on discuss them before proceeding with implementation.
+5. For any questions you need clarification on, discuss them before proceeding with implementation.
+6. Code should build without and compilation warnings.
 
 **Additional Context**
 
@@ -17,3 +18,6 @@ trigger: always_on
 - Read architecture_v2.md for full context of the project.
 - Read prompts.md for additional context on future work.
 
+Additional Rules:
+
+- Do not use emoji's in documentation. (It's tacky.)

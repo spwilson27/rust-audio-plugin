@@ -1,0 +1,19 @@
+[package]
+name = "gui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "gui"
+
+[dependencies]
+anyhow.workspace = true
+raw-window-handle.workspace = true
+
+# GUI framework will use pal and render crates
+pal = { path = "../pal" }
+# render = { path = "../render" } # Phase 3
+
+[dev-dependencies]

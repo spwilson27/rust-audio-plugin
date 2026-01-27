@@ -62,8 +62,6 @@ fn run_with_gui() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_headless_mode_doesnt_panic() {
         // Verify headless mode initialization doesn't crash

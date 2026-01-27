@@ -5,6 +5,7 @@ A metal-down VST3/CLAP audio plugin built with Rust and Vulkan.
 ## Architecture
 
 - **PAL (Platform Abstraction Layer)** - Native windowing without `winit`
+- **GUI** - Shared interface components (event handling, UI state)
 - **Render** - Vulkan graphics with SVG rasterization
 - **Core** - Lock-free audio processing and state management
 
@@ -14,8 +15,9 @@ A metal-down VST3/CLAP audio plugin built with Rust and Vulkan.
 
 - Rust toolchain (stable)
 - Vulkan SDK (for shader compilation with `glslc`)
-  - macOS: `brew install vulkan-tools`
+  - macOS: `brew install vulkan-tools` or download from [LunarG](https://vulkan.lunarg.com/)
   - Windows: Install from [LunarG Vulkan SDK](https://vulkan.lunarg.com/)
+  - The build system will auto-detect glslc in standard locations including `~/.local/VulkanSDK`
 
 ### Build Commands
 
@@ -23,11 +25,11 @@ A metal-down VST3/CLAP audio plugin built with Rust and Vulkan.
 # Build all workspace crates
 cargo build --workspace
 
-# Run tests
+# Run tests (5 tests passing)
 cargo test --workspace
 
-# Build and bundle the plugin
-cargo xtask bundle
+# Build and bundle the plugin (with shader compilation)
+cargo run --package xtask -- bundle
 
 # Run standalone (with GUI, when implemented)
 cargo run --bin standalone
@@ -38,24 +40,27 @@ cargo run --bin standalone -- --headless
 
 ### Bundle Output
 
-After running `cargo xtask bundle`, the plugin will be located at:
+After running `cargo run --package xtask -- bundle`, the plugin will be located at:
 
 - **macOS**: `target/bundled/splug.vst3/`
 - **Windows**: `target/bundled/splug.vst3`
 
+Compiled shaders: `target/shaders/*.spv`
+
 ## Development Status
 
-✅ **Phase 1: Build System & Skeleton** - Complete
-- Workspace structure with 4 crates
+**Phase 1: Build System & Skeleton** - Complete
+- Workspace structure with 6 crates
 - cargo-xtask build automation
-- Shader compilation pipeline
+- Shader compilation pipeline (auto-detects Vulkan SDK)
 - Platform-specific bundle generation
 - macOS codesigning
+- PAL and GUI crate skeletons
 
-⏳ **Phase 2: Platform Abstraction Layer** - Not started
-⏳ **Phase 3: Graphics Core** - Not started
-⏳ **Phase 4: Core Logic & Persistence** - Not started
-⏳ **Phase 5: Test Harness (RPC)** - Not started
+**Phase 2: Platform Abstraction Layer** - Skeleton created  
+**Phase 3: Graphics Core** - Not started  
+**Phase 4: Core Logic & Persistence** - Not started  
+**Phase 5: Test Harness (RPC)** - Not started
 
 ## Project Structure
 
@@ -64,26 +69,33 @@ rust-vst/
 ├── plugin/              # Core plugin library (cdylib)
 │   └── src/
 │       ├── lib.rs       # VST3 entry points with panic safety
-│       ├── pal/         # Platform Abstraction Layer (Phase 2)
+│       ├── pal/         # Platform Abstraction Layer (legacy, moved to pal crate)
 │       ├── render/      # Vulkan rendering (Phase 3)
 │       ├── core/        # Audio processing (Phase 4)
 │       └── shaders/     # GLSL shaders
+├── pal/                 # Platform Abstraction Layer library
+│   └── src/
+│       ├── lib.rs       # NativeWindow trait
+│       ├── macos.rs     # macOS implementation (Phase 2)
+│       └── win32.rs     # Windows implementation (Phase 2)
+├── gui/                 # Shared GUI framework
+│   └── src/lib.rs       # UIEvent types, GuiContext (Phase 2-3)
 ├── standalone/          # Standalone host for testing
 │   └── src/main.rs
 ├── xtask/               # Build automation
-│   └── src/main.rs
+│   └── src/main.rs      # Shader compilation, bundling, codesigning
 └── definitions/         # Protobuf schemas
-    └── src/lib.rs
+    └── src/lib.rs       # State and RPC definitions (Phase 4-5)
 ```
 
 ## Real-Time Safety Constraints
 
 This project follows strict real-time audio programming rules:
 
-- ❌ No allocations on the audio thread (`Box`, `Vec`, `String`)
-- ❌ No mutex locking on the audio thread
-- ✅ Use `rtrb` or atomics for parameter communication
-- ✅ All FFI entry points wrapped in `catch_unwind` for panic safety
+- No allocations on the audio thread (`Box`, `Vec`, `String`)
+- No mutex locking on the audio thread
+- Use `rtrb` or atomics for parameter communication
+- All FFI entry points wrapped in `catch_unwind` for panic safety
 
 ## License
 

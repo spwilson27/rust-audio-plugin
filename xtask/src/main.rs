@@ -87,16 +87,19 @@ fn compile_shaders(root: &Path) -> Result<()> {
         return Ok(());
     }
 
-    // Check if glslc is available
-    let glslc_available = Command::new("glslc").arg("--version").output().is_ok();
+    // Find glslc in PATH or common Vulkan SDK locations
+    let glslc_path = find_glslc();
 
-    if !glslc_available {
-        println!("  ⚠️  glslc not found in PATH - skipping shader compilation");
+    if glslc_path.is_none() {
+        println!("  ⚠️  glslc not found - skipping shader compilation");
         println!("      Install Vulkan SDK to enable shader compilation:");
         println!("      macOS: brew install vulkan-tools");
-        println!("      Windows: https://vulkan.lunarg.com/");
+        println!("      Or download from: https://vulkan.lunarg.com/");
         return Ok(());
     }
+
+    let glslc = glslc_path.unwrap();
+    println!("  Using glslc: {}", glslc.display());
 
     let mut compiled_count = 0;
 
@@ -118,7 +121,7 @@ fn compile_shaders(root: &Path) -> Result<()> {
 
         println!("  Compiling: {}", path.display());
 
-        let status = Command::new("glslc")
+        let status = Command::new(&glslc)
             .arg(path)
             .arg("-o")
             .arg(&output_path)
@@ -139,6 +142,60 @@ fn compile_shaders(root: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Find glslc compiler in PATH or common Vulkan SDK locations
+fn find_glslc() -> Option<PathBuf> {
+    // Try PATH first
+    if Command::new("glslc").arg("--version").output().is_ok() {
+        return Some(PathBuf::from("glslc"));
+    }
+
+    // Common Vulkan SDK installation paths
+    let home = std::env::var("HOME").ok()?;
+    let possible_paths = [
+        // User-local installation
+        format!("{}/.local/VulkanSDK", home),
+        // System installations
+        "/usr/local/bin".to_string(),
+        "/opt/homebrew/bin".to_string(),
+    ];
+
+    for base_path in &possible_paths {
+        let base = PathBuf::from(base_path);
+
+        // For VulkanSDK directory, search for version subdirectories
+        if base.join("1.4.335.1").exists()
+            || base.file_name().and_then(|n| n.to_str()) == Some("VulkanSDK")
+        {
+            // Search for glslc in version subdirectories
+            if let Ok(entries) = std::fs::read_dir(&base) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let version_dir = entry.path();
+                    if version_dir.is_dir() {
+                        // macOS: check macOS/bin/glslc
+                        let macos_glslc = version_dir.join("macOS/bin/glslc");
+                        if macos_glslc.exists() {
+                            return Some(macos_glslc);
+                        }
+                        // Linux/Windows: check bin/glslc
+                        let bin_glslc = version_dir.join("bin/glslc");
+                        if bin_glslc.exists() {
+                            return Some(bin_glslc);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Direct binary path
+            let glslc = base.join("glslc");
+            if glslc.exists() {
+                return Some(glslc);
+            }
+        }
+    }
+
+    None
 }
 
 /// Build the Rust library

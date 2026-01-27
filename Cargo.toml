@@ -5,6 +5,8 @@ members = [
     "standalone",
     "xtask",
     "definitions",
+    "pal",
+    "gui",
 ]
 
 [workspace.package]
