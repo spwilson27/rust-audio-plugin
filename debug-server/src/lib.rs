@@ -11,7 +11,7 @@ pub mod debug_control {
 
 pub use debug_control::debug_control_client::DebugControlClient;
 pub use debug_control::debug_control_server::{DebugControl, DebugControlServer};
-pub use debug_control::{Ack, InputEventMsg, KeyMsg, MouseMsg};
+pub use debug_control::{Ack, InputEventMsg, KeyMsg, MouseMsg, QuitMsg};
 
 use pal::UIEvent;
 
@@ -81,6 +81,7 @@ impl DebugControl for DebugControlImpl {
         let event = match msg.event {
             Some(debug_control::input_event_msg::Event::Mouse(mouse)) => map_mouse_event(mouse),
             Some(debug_control::input_event_msg::Event::Key(key)) => map_key_event(key),
+            Some(debug_control::input_event_msg::Event::Quit(_)) => UIEvent::Quit,
             None => return Err(Status::invalid_argument("No event provided")),
         };
 

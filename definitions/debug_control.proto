@@ -9,8 +9,11 @@ message InputEventMsg {
     oneof event {
         MouseMsg mouse = 1;
         KeyMsg key = 2;
+        QuitMsg quit = 3;
     }
 }
+
+message QuitMsg {}
 
 message MouseMsg {
     enum Type {

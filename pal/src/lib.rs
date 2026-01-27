@@ -29,6 +29,7 @@ pub enum UIEvent {
     MouseMove { x: f64, y: f64 },
     KeyDown { keycode: u32 },
     KeyUp { keycode: u32 },
+    Quit,
 }
 
 /// Core trait for platform-specific window implementations
@@ -58,6 +59,11 @@ pub trait NativeWindow {
     /// - macOS: NSScreen.backingScaleFactor (e.g., 2.0 on Retina)
     /// - Windows: GetDpiForWindow result / 96.0
     fn get_scale_factor(&self) -> f64;
+
+    /// Check if the window exists
+    ///
+    /// Used to exit the application when the window is closed
+    fn closed(&self) -> bool;
 
     /// Check if the window is currently visible
     ///

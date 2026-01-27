@@ -73,6 +73,10 @@ fn run_headless() -> Result<()> {
         // Since we don't have an EventRouter/Window in headless, we read directly from rx
         while let Ok(event) = _rx.try_recv() {
             println!("Headless received event: {:?}", event);
+            if let pal::UIEvent::Quit = event {
+                println!("Headless received Quit signal, exiting...");
+                return Ok(()); // return from run_headless, effectively exiting main
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
@@ -134,8 +138,19 @@ fn run_with_gui() -> Result<()> {
 
         window.set_size(800, 600)?;
 
-        window.set_event_callback(|event| {
+        // Flag to signal exit from callback
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let should_quit = Arc::new(AtomicBool::new(false));
+        let should_quit_cb = should_quit.clone();
+
+        window.set_event_callback(move |event| {
             println!("Received event (Main): {:?}", event);
+            if let pal::UIEvent::Quit = event {
+                should_quit_cb.store(true, Ordering::Relaxed);
+            }
         });
 
         // 4. Run the event loop
@@ -147,7 +162,14 @@ fn run_with_gui() -> Result<()> {
 
         loop {
             // Poll for RPC events
+            // Poll for RPC events
             window.event_router_mut().poll_events();
+
+            // Check for quit signal from RPC
+            if should_quit.load(Ordering::Relaxed) {
+                println!("Received Quit signal, exiting...");
+                break;
+            }
 
             objc2::rc::autoreleasepool(|_| {
                 // app.nextEventMatchingMask:untilDate:inMode:dequeue:
@@ -164,8 +186,8 @@ fn run_with_gui() -> Result<()> {
                 }
             });
 
-            // Exit if window is closed
-            if !window.is_visible() {
+            // Exit if window is closed (not visible AND not minimized)
+            if !window.closed() {
                 println!("Window closed, exiting...");
                 break;
             }

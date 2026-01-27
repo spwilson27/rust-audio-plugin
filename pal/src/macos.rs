@@ -466,6 +466,23 @@ impl crate::NativeWindow for MacOSWindow {
         self.scale_factor
     }
 
+    fn closed(&self) -> bool {
+        unsafe {
+            // Check if view has a window
+            let window_ptr: *mut AnyObject = objc2::msg_send![&*self.view, window];
+            if window_ptr.is_null() {
+                return false;
+            }
+
+            // Window exists if it's visible OR minimized
+            // If it's closed, isVisible is false AND isMiniaturized is false
+            let is_visible: bool = objc2::msg_send![window_ptr, isVisible];
+            let is_minimized: bool = objc2::msg_send![window_ptr, isMiniaturized];
+
+            is_visible || is_minimized
+        }
+    }
+
     fn is_visible(&self) -> bool {
         // Check if view has a window AND that window is visible
         unsafe {
