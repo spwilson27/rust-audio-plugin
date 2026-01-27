@@ -11,8 +11,6 @@ use clap::Parser;
 #[cfg(target_os = "macos")]
 use pal::macos::MacOSWindow;
 #[cfg(target_os = "macos")]
-use pal::NativeWindow; // Import trait for attach
-
 #[derive(Parser, Debug)]
 #[command(name = "standalone")]
 #[command(about = "Standalone host for splug audio plugin", long_about = None)]
@@ -75,6 +73,8 @@ fn run_headless() -> Result<()> {
             println!("Headless received event: {:?}", event);
             if let pal::UIEvent::Quit = event {
                 println!("Headless received Quit signal, exiting...");
+                // Wait a bit to allow RPC response to flush
+                std::thread::sleep(std::time::Duration::from_millis(500));
                 return Ok(()); // return from run_headless, effectively exiting main
             }
         }
@@ -90,11 +90,8 @@ fn run_headless() -> Result<()> {
 
 /// Run the plugin with GUI
 /// Initializes window and rendering pipeline
-#[cfg(target_os = "macos")]
 fn run_with_gui() -> Result<()> {
-    use objc2::rc::Retained;
-    use objc2::runtime::{AnyClass, AnyObject};
-    use objc2_foundation::ns_string;
+    println!("Initializing macOS window...");
 
     println!("Initializing macOS window...");
 
@@ -103,98 +100,85 @@ fn run_with_gui() -> Result<()> {
     let temp_dir = std::env::temp_dir();
     let lockfile_path = temp_dir.join(format!("splug_pid_{}.json", pid));
 
-    unsafe {
-        // 1. Initialize NSApplication
-        let ns_app_class = AnyClass::get("NSApplication")
-            .expect("NSApplication class not found - is AppKit linked?");
-        let app: Retained<AnyObject> = objc2::msg_send_id![ns_app_class, sharedApplication];
+    use pal::{App, NativeWindow, UIEvent}; // Import traits
 
-        // Set activation policy to regular app
-        let policy: i64 = 0; // NSApplicationActivationPolicyRegular
-        let _: bool = objc2::msg_send![&*app, setActivationPolicy: policy];
+    // 1. Initialize Application via PAL
+    // Use Box<dyn> to hold the platform-specific implementation
+    #[cfg(target_os = "macos")]
+    let app: Box<dyn App> = Box::new(pal::MacOSApp::init()?);
 
-        // 2. Create the window via PAL
-        // For standalone, we pass null as parent, which implies creating a new window
-        let mut window = MacOSWindow::attach(std::ptr::null_mut())?;
+    // 2. Create the window via PAL
+    #[cfg(target_os = "macos")]
+    // Safety: Passing null pointer is valid for standalone initialization
+    let mut window: Box<dyn NativeWindow> =
+        Box::new(unsafe { MacOSWindow::attach(std::ptr::null_mut())? });
 
-        // 3. Setup RPC Server for testing
-        // Create a channel for UI events
-        let (tx, rx) = crossbeam_channel::unbounded();
+    #[cfg(not(target_os = "macos"))]
+    let (app, mut window) = unimplemented!("Only macOS supported for now");
 
-        // Attach receiver to EventRouter
-        window.event_router_mut().set_event_receiver(rx);
+    // 3. Setup RPC Server for testing
+    // Create a channel for UI events
+    let (tx, rx) = crossbeam_channel::unbounded();
 
-        // Start RPC server
-        match debug_server::RpcServer::start(0, tx) {
-            Ok(port) => {
-                println!("RPC Server started on port {}", port);
-                let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
-                std::fs::write(&lockfile_path, json).context("Failed to write lockfile")?;
-            }
-            Err(e) => {
-                eprintln!("Failed to start RPC server: {}", e);
-            }
+    // Attach receiver to EventRouter using the trait method
+    window.event_router().set_event_receiver(rx);
+
+    // Start RPC server
+    match debug_server::RpcServer::start(0, tx) {
+        Ok(port) => {
+            println!("RPC Server started on port {}", port);
+            let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
+            std::fs::write(&lockfile_path, json).context("Failed to write lockfile")?;
+        }
+        Err(e) => {
+            eprintln!("Failed to start RPC server: {}", e);
+        }
+    }
+
+    window.set_size(800, 600)?;
+
+    // Flag to signal exit from callback
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    let should_quit = Arc::new(AtomicBool::new(false));
+    let should_quit_cb = should_quit.clone();
+
+    // Call set_callback on the EventRouter directly
+    window.event_router().set_callback(move |event| {
+        println!("Received event (Main): {:?}", event);
+        if let UIEvent::Quit = event {
+            should_quit_cb.store(true, Ordering::Relaxed);
+        }
+    });
+
+    println!("\nWindow opened!");
+    println!("Close the window to exit.\n");
+
+    loop {
+        // Poll for RPC events
+        window.event_router().poll_events();
+
+        // Check for quit signal from RPC
+        if should_quit.load(Ordering::Relaxed) {
+            println!("Received Quit signal, exiting...");
+            // Wait a bit to allow RPC response to flush
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            break;
         }
 
-        window.set_size(800, 600)?;
+        // Poll system events via PAL
+        app.poll_events();
 
-        // Flag to signal exit from callback
-        use std::sync::{
-            atomic::{AtomicBool, Ordering},
-            Arc,
-        };
-        let should_quit = Arc::new(AtomicBool::new(false));
-        let should_quit_cb = should_quit.clone();
-
-        window.set_event_callback(move |event| {
-            println!("Received event (Main): {:?}", event);
-            if let pal::UIEvent::Quit = event {
-                should_quit_cb.store(true, Ordering::Relaxed);
-            }
-        });
-
-        // 4. Run the event loop
-        let _: () = objc2::msg_send![&*app, activateIgnoringOtherApps: true];
-        let _: () = objc2::msg_send![&*app, finishLaunching];
-
-        println!("\nWindow opened!");
-        println!("Close the window to exit.\n");
-
-        loop {
-            // Poll for RPC events
-            // Poll for RPC events
-            window.event_router_mut().poll_events();
-
-            // Check for quit signal from RPC
-            if should_quit.load(Ordering::Relaxed) {
-                println!("Received Quit signal, exiting...");
-                break;
-            }
-
-            objc2::rc::autoreleasepool(|_| {
-                // app.nextEventMatchingMask:untilDate:inMode:dequeue:
-                let event: Option<Retained<AnyObject>> = objc2::msg_send_id![
-                    &*app,
-                    nextEventMatchingMask: u64::MAX // NSEventMaskAny
-                    untilDate: std::ptr::null::<AnyObject>()
-                    inMode: ns_string!("kCFRunLoopDefaultMode")
-                    dequeue: true
-                ];
-
-                if let Some(event) = event {
-                    let _: () = objc2::msg_send![&*app, sendEvent: &*event];
-                }
-            });
-
-            // Exit if window is closed (not visible AND not minimized)
-            if !window.closed() {
-                println!("Window closed, exiting...");
-                break;
-            }
-
-            // Sleep a tiny bit to avoid 100% CPU in this naive loop
-            std::thread::sleep(std::time::Duration::from_millis(16));
+        // Exit if window is closed (not visible AND not minimized)
+        if !window.closed() {
+            println!("Window closed, exiting...");
+            break;
         }
+
+        // Sleep a tiny bit to avoid 100% CPU in this naive loop
+        std::thread::sleep(std::time::Duration::from_millis(16));
     }
 
     // Unreachable loop but compiler doesn't know for sure if we break

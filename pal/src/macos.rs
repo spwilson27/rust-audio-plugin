@@ -494,6 +494,10 @@ impl crate::NativeWindow for MacOSWindow {
             is_visible
         }
     }
+
+    fn event_router(&mut self) -> &mut crate::EventRouter {
+        &mut self.event_router
+    }
 }
 
 impl Drop for MacOSWindow {
@@ -534,5 +538,53 @@ impl MacOSWindow {
     /// Helper to access the EventRouter (for standalone RPC)
     pub fn event_router_mut(&mut self) -> &mut crate::EventRouter {
         &mut self.event_router
+    }
+}
+
+// ============================================================================
+// MacOSApp Implementation
+// ============================================================================
+
+/// macOS application wrapper
+pub struct MacOSApp {
+    ns_app: Retained<AnyObject>,
+}
+
+impl crate::App for MacOSApp {
+    fn init() -> Result<Self> {
+        unsafe {
+            let ns_app_class = AnyClass::get("NSApplication")
+                .context("NSApplication class not found - is AppKit linked?")?;
+            let app: Retained<AnyObject> = objc2::msg_send_id![ns_app_class, sharedApplication];
+
+            // Set activation policy to regular app
+            let policy: i64 = 0; // NSApplicationActivationPolicyRegular
+            let _: bool = objc2::msg_send![&*app, setActivationPolicy: policy];
+
+            let _: () = objc2::msg_send![&*app, activateIgnoringOtherApps: true];
+            let _: () = objc2::msg_send![&*app, finishLaunching];
+
+            Ok(Self { ns_app: app })
+        }
+    }
+
+    fn poll_events(&self) {
+        unsafe {
+            objc2::rc::autoreleasepool(|_| {
+                use objc2_foundation::ns_string;
+                // app.nextEventMatchingMask:untilDate:inMode:dequeue:
+                let event: Option<Retained<AnyObject>> = objc2::msg_send_id![
+                    &*self.ns_app,
+                    nextEventMatchingMask: u64::MAX // NSEventMaskAny
+                    untilDate: std::ptr::null::<AnyObject>()
+                    inMode: ns_string!("kCFRunLoopDefaultMode")
+                    dequeue: true
+                ];
+
+                if let Some(event) = event {
+                    let _: () = objc2::msg_send![&*self.ns_app, sendEvent: &*event];
+                }
+            });
+        }
     }
 }

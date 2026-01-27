@@ -10,6 +10,8 @@
 //! like winit assume they own the application lifecycle, which is incompatible with
 //! plugin hosting.
 //!
+//! For standalone usage, the PAL provides an `App` trait to abstract the system event loop.
+//!
 //! ## Platform Support
 //!
 //! - **macOS**: Uses `objc2` to create NSView subclass with CAMetalLayer backing
@@ -69,6 +71,9 @@ pub trait NativeWindow {
     ///
     /// Used to pause rendering when the plugin UI is hidden (e.g., tab switch in DAW)
     fn is_visible(&self) -> bool;
+
+    /// Get mutable access to the event router
+    fn event_router(&mut self) -> &mut EventRouter;
 }
 
 // Platform-specific implementations
@@ -94,3 +99,21 @@ mod tests {
         assert!(true);
     }
 }
+
+/// Core trait for application lifecycle management (Standalone mode)
+pub trait App {
+    /// Initialize the application (e.g., NSApp)
+    fn init() -> Result<Self>
+    where
+        Self: Sized;
+
+    /// Poll for pending system events (non-blocking)
+    fn poll_events(&self);
+}
+
+// Re-export the platform-specific implementation
+#[cfg(target_os = "macos")]
+pub use macos::MacOSApp;
+
+#[cfg(target_os = "windows")]
+pub use win32::Win32App;
