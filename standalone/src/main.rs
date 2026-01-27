@@ -120,7 +120,7 @@ fn run_with_gui() -> Result<()> {
         println!("Setting up event logging...");
         if let Some(window) = gui_ctx.get_window_mut() {
             window.set_event_callback(|event| {
-                println!("Event: {:?}", event);
+                println!("Received event: {:?}", event);
             });
         }
 

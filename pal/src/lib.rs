@@ -18,6 +18,19 @@
 use anyhow::Result;
 use raw_window_handle::RawWindowHandle;
 
+mod event_router;
+pub use event_router::EventRouter;
+
+/// UI Event types for input handling
+#[derive(Debug, Clone, Copy)]
+pub enum UIEvent {
+    MouseDown { x: f64, y: f64, button: u32 },
+    MouseUp { x: f64, y: f64, button: u32 },
+    MouseMove { x: f64, y: f64 },
+    KeyDown { keycode: u16 },
+    KeyUp { keycode: u16 },
+}
+
 /// Core trait for platform-specific window implementations
 pub trait NativeWindow {
     /// Attach to a parent window provided by the host

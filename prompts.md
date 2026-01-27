@@ -328,10 +328,10 @@ Use this as a high-level verification before moving to the next phase:
   - [x] macOS: NSView creation and parenting working
   - [x] macOS: Scale factor detection (Retina support)
   - [x] macOS: Event callback API implemented
-  - [/] macOS: NSView subclass for event delivery (API ready, implementation deferred to Phase 2.3)
-  - [ ] macOS: `CVDisplayLink` running at 60 FPS (deferred to Phase 2.3/2.4)
+  - [x] macOS: NSView subclass for event delivery
+  - [ ] macOS: `CVDisplayLink` running at 60 FPS (deferred to Phase 3)
   - [ ] Windows: `WM_TIMER` running at 60 FPS (not started)
-  - [ ] Mouse/keyboard events translated to `UIEvent` enum (infrastructure ready, delivery pending NSView subclass)
+  - [x] Mouse/keyboard events translated to `UIEvent` enum
   - [ ] VST3 resize protocol implemented with Size Sentinel (deferred to Phase 2.4)
   - [x] Standalone: Window opens with proper NSApplication setup
   - [x] Standalone: Window closes cleanly and app terminates

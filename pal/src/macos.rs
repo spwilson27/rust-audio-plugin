@@ -15,7 +15,7 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 
 use objc2::encode::{Encode, Encoding};
-use objc2::msg_send_id;
+// use objc2::msg_send_id;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2_foundation::MainThreadMarker;
@@ -54,25 +54,266 @@ unsafe impl Encode for NSRect {
     const ENCODING: Encoding = Encoding::Struct("CGRect", &[NSPoint::ENCODING, NSSize::ENCODING]);
 }
 
+// ============================================================================
+// NSView Subclass Implementation
+// ============================================================================
+
+use objc2::declare::ClassBuilder;
+use objc2::runtime::{AnyClass, Sel};
+use objc2::sel;
+// use std::sync::Once;
+
+/// Key for storing EventRouter pointer in NSView associated objects
+static EVENT_ROUTER_KEY: &str = "RustEventRouterPointer";
+
+/// Create the RustPluginView NSView subclass at runtime
+///
+/// This function uses objc2's ClassBuilder to create an Objective-C class
+/// that inherits from NSView and overrides event handling methods.
+fn get_rust_view_class() -> &'static AnyClass {
+    static REGISTER_CLASS: std::sync::Once = std::sync::Once::new();
+    static mut CLASS: *const AnyClass = std::ptr::null();
+
+    unsafe {
+        REGISTER_CLASS.call_once(|| {
+            let ns_view_class = AnyClass::get("NSView").expect("NSView class not found");
+            let mut builder = ClassBuilder::new("RustPluginView", ns_view_class).unwrap();
+
+            // Add Ivar to store the EventRouter pointer
+            builder.add_ivar::<*mut c_void>(EVENT_ROUTER_KEY);
+
+            // Override acceptsFirstResponder to return YES so we receive keyboard events
+            builder.add_method(
+                sel!(acceptsFirstResponder),
+                accepts_first_responder
+                    as extern "C" fn(*mut AnyObject, Sel) -> objc2::runtime::Bool,
+            );
+
+            // Mouse event handlers
+            builder.add_method(
+                sel!(mouseDown:),
+                mouse_down as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(mouseUp:),
+                mouse_up as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(rightMouseDown:),
+                right_mouse_down as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(rightMouseUp:),
+                right_mouse_up as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(mouseMoved:),
+                mouse_moved as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(mouseDragged:),
+                mouse_dragged as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+
+            // Keyboard event handlers
+            builder.add_method(
+                sel!(keyDown:),
+                key_down as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(keyUp:),
+                key_up as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+
+            let cls = builder.register();
+            CLASS = cls;
+        });
+        &*CLASS
+    }
+}
+
+// ============================================================================
+// Event Handler Implementations
+// ============================================================================
+
+/// Accept first responder to receive keyboard events
+extern "C" fn accepts_first_responder(_this: *mut AnyObject, _sel: Sel) -> objc2::runtime::Bool {
+    objc2::runtime::Bool::YES
+}
+
+/// Helper to get EventRouter from associated object
+unsafe fn get_event_router(view: *mut AnyObject) -> Option<&'static mut crate::EventRouter> {
+    use objc2::ffi::object_getInstanceVariable; // Correct import: GET
+    use std::ffi::CString;
+
+    if view.is_null() {
+        return None;
+    }
+
+    let key = CString::new(EVENT_ROUTER_KEY).unwrap();
+    let mut out_ptr: *const c_void = std::ptr::null();
+
+    // Get the instance variable
+    object_getInstanceVariable(
+        view as *mut _ as *mut objc2::ffi::objc_object,
+        key.as_ptr(),
+        &mut out_ptr,
+    );
+
+    if out_ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(out_ptr as *mut crate::EventRouter))
+    }
+}
+
+/// Helper to extract mouse event data and transform coordinates
+unsafe fn handle_mouse_event(
+    view: *mut AnyObject,
+    event: *mut AnyObject,
+    button: u32,
+    event_type: fn(f64, f64, u32) -> crate::UIEvent,
+) {
+    if event.is_null() || view.is_null() {
+        return;
+    }
+
+    // Get mouse location in window coordinates
+    let location: NSPoint = objc2::msg_send![event, locationInWindow];
+
+    // Convert to view coordinates
+    let view_location: NSPoint =
+        objc2::msg_send![view, convertPoint: location fromView: std::ptr::null::<AnyObject>()];
+
+    // Get view height for coordinate transformation
+    let bounds: NSRect = objc2::msg_send![view, bounds];
+    let view_height = bounds.size.height;
+
+    // Transform from Cocoa coordinates (bottom-left origin) to Vulkan (top-left origin)
+    let vulkan_y = view_height - view_location.y;
+
+    // Route event through EventRouter
+    if let Some(router) = get_event_router(view) {
+        router.route_event(event_type(view_location.x, vulkan_y, button));
+    }
+}
+
+/// Mouse down handler (left button)
+extern "C" fn mouse_down(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
+    unsafe {
+        handle_mouse_event(this, event, 0, |x, y, b| crate::UIEvent::MouseDown {
+            x,
+            y,
+            button: b,
+        });
+    }
+}
+
+/// Mouse up handler (left button)
+extern "C" fn mouse_up(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
+    unsafe {
+        handle_mouse_event(this, event, 0, |x, y, b| crate::UIEvent::MouseUp {
+            x,
+            y,
+            button: b,
+        });
+    }
+}
+
+/// Right mouse down handler
+extern "C" fn right_mouse_down(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
+    unsafe {
+        handle_mouse_event(this, event, 1, |x, y, b| crate::UIEvent::MouseDown {
+            x,
+            y,
+            button: b,
+        });
+    }
+}
+
+/// Right mouse up handler
+extern "C" fn right_mouse_up(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
+    unsafe {
+        handle_mouse_event(this, event, 1, |x, y, b| crate::UIEvent::MouseUp {
+            x,
+            y,
+            button: b,
+        });
+    }
+}
+
+/// Mouse moved handler
+extern "C" fn mouse_moved(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
+    unsafe {
+        if event.is_null() {
+            return;
+        }
+
+        let location: NSPoint = objc2::msg_send![event, locationInWindow];
+        let view_location: NSPoint =
+            objc2::msg_send![this, convertPoint: location fromView: std::ptr::null::<AnyObject>()];
+        let bounds: NSRect = objc2::msg_send![this, bounds];
+        let view_height = bounds.size.height;
+        let vulkan_y = view_height - view_location.y;
+
+        if let Some(router) = get_event_router(this) {
+            router.route_event(crate::UIEvent::MouseMove {
+                x: view_location.x,
+                y: vulkan_y,
+            });
+        }
+    }
+}
+
+/// Mouse dragged handler
+extern "C" fn mouse_dragged(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
+    // Treat drag as move for now
+    mouse_moved(this, _sel, event);
+}
+
+/// Key down handler
+extern "C" fn key_down(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
+    unsafe {
+        if event.is_null() {
+            return;
+        }
+
+        let keycode: u16 = objc2::msg_send![event, keyCode];
+
+        if let Some(router) = get_event_router(this) {
+            router.route_event(crate::UIEvent::KeyDown { keycode });
+        }
+    }
+}
+
+/// Key up handler
+extern "C" fn key_up(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
+    unsafe {
+        if event.is_null() {
+            return;
+        }
+
+        let keycode: u16 = objc2::msg_send![event, keyCode];
+
+        if let Some(router) = get_event_router(this) {
+            router.route_event(crate::UIEvent::KeyUp { keycode });
+        }
+    }
+}
+
+// ============================================================================
+// MacOSWindow Implementation
+// ============================================================================
+
 /// macOS window implementation using NSView
 pub struct MacOSWindow {
     view: Retained<AnyObject>,
     width: u32,
     height: u32,
     scale_factor: f64,
-    // Event callback - will be called when events occur
-    // Using Option<Box<>> for now, Phase 2.3 will use lock-free queue
-    event_callback: Option<Box<dyn FnMut(UIEvent) + Send>>,
-}
-
-// Custom UIEvent type for PAL layer (re-export from gui in Phase 2.3)
-#[derive(Debug, Clone, Copy)]
-pub enum UIEvent {
-    MouseDown { x: f64, y: f64, button: u32 },
-    MouseUp { x: f64, y: f64, button: u32 },
-    MouseMove { x: f64, y: f64 },
-    KeyDown { keycode: u16 },
-    KeyUp { keycode: u16 },
+    // EventRouter lives here and pointer is stored in view's associated objects
+    // Must be Boxed to ensure stable address when MacOSWindow moves
+    event_router: Box<crate::EventRouter>,
 }
 
 impl crate::NativeWindow for MacOSWindow {
@@ -86,12 +327,11 @@ impl crate::NativeWindow for MacOSWindow {
             bail!("Parent view pointer is null");
         }
 
-        // For now, create a basic NSView using objc2
-        // We'll create a subclass in Phase 2.2 when we add event handling
-        let ns_view_class = objc2::class!(NSView);
+        // Create an instance of our custom RustPluginView class
+        let view_class = get_rust_view_class();
 
-        // Allocate and init new NSView
-        let view: Retained<AnyObject> = msg_send_id![ns_view_class, new];
+        // Allocate and init new view using new selector
+        let view: Retained<AnyObject> = unsafe { objc2::msg_send_id![view_class, new] };
 
         let parent_ref = &*parent_view;
         let bounds: NSRect = objc2::msg_send![parent_ref, bounds];
@@ -119,13 +359,33 @@ impl crate::NativeWindow for MacOSWindow {
             }
         };
 
-        Ok(MacOSWindow {
+        // Create MacOSWindow with Boxed EventRouter for stable address
+        let mut window = MacOSWindow {
             view,
             width,
             height,
             scale_factor,
-            event_callback: None,
-        })
+            event_router: Box::new(crate::EventRouter::new()),
+        };
+
+        // Store EventRouter pointer in view's associated objects so event handlers can access it
+        unsafe {
+            use objc2::ffi::object_setInstanceVariable;
+            use std::ffi::CString;
+
+            let key = CString::new(EVENT_ROUTER_KEY).unwrap();
+            // Get pointer to the EventRouter on the HEAP, not the Box on the stack
+            let router_ptr = &*window.event_router as *const crate::EventRouter as *mut c_void;
+
+            let view_ptr = Retained::as_ptr(&window.view);
+            object_setInstanceVariable(
+                view_ptr as *mut objc2::runtime::AnyObject as *mut objc2::ffi::objc_object,
+                key.as_ptr(),
+                router_ptr,
+            );
+        }
+
+        Ok(window)
     }
 
     fn get_raw_handle(&self) -> RawWindowHandle {
@@ -185,9 +445,9 @@ impl MacOSWindow {
     /// Events will be delivered on the main thread as well.
     pub fn set_event_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(UIEvent) + Send + 'static,
+        F: FnMut(crate::UIEvent) + Send + 'static,
     {
-        self.event_callback = Some(Box::new(callback));
+        self.event_router.set_callback(callback);
 
         // TODO Phase 2.3: Create NSView subclass to deliver events
         // Will need to:
@@ -200,9 +460,7 @@ impl MacOSWindow {
 
     /// Trigger an event (for testing or manual event injection)
     #[allow(dead_code)]
-    fn trigger_event(&mut self, event: UIEvent) {
-        if let Some(ref mut callback) = self.event_callback {
-            callback(event);
-        }
+    fn trigger_event(&mut self, event: crate::UIEvent) {
+        self.event_router.route_event(event);
     }
 }
