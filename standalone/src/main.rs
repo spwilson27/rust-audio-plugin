@@ -48,16 +48,90 @@ fn run_headless() -> Result<()> {
 
 /// Run the plugin with GUI
 /// Initializes window and rendering pipeline
+#[cfg(target_os = "macos")]
 fn run_with_gui() -> Result<()> {
-    println!("GUI mode: Window and Vulkan renderer would start here");
-    println!("TODO: Phase 2 - Initialize PAL window");
-    println!("TODO: Phase 3 - Initialize Vulkan context");
-    println!("TODO: Phase 4 - Initialize audio processor");
+    use objc2::msg_send_id;
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyClass, AnyObject};
+    use objc2_foundation::NSString;
+    use std::ffi::c_void;
 
-    // For now, just demonstrate it compiles
-    println!("Window initialization not yet implemented");
+    println!("Initializing macOS window...");
+
+    unsafe {
+        // 1. Initialize NSApplication
+        let ns_app_class = AnyClass::get("NSApplication")
+            .expect("NSApplication class not found - is AppKit linked?");
+        let app: Retained<AnyObject> = msg_send_id![ns_app_class, sharedApplication];
+
+        // Set activation policy to regular app (shows in Dock, can become active)
+        let policy: i64 = 0; // NSApplicationActivationPolicyRegular
+        let _: bool = objc2::msg_send![&*app, setActivationPolicy: policy];
+
+        // 2. Create NSWindow
+        let window_rect = objc2_foundation::NSRect {
+            origin: objc2_foundation::NSPoint { x: 100.0, y: 100.0 },
+            size: objc2_foundation::NSSize {
+                width: 800.0,
+                height: 600.0,
+            },
+        };
+
+        // Style mask: Titled | Closable | Miniaturizable | Resizable
+        let style_mask: u64 = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);
+
+        let ns_window_class = AnyClass::get("NSWindow").expect("NSWindow class not found");
+        let window: Retained<AnyObject> = msg_send_id![
+            msg_send_id![ns_window_class, alloc],
+            initWithContentRect: window_rect
+            styleMask: style_mask
+            backing: 2u64  // NSBackingStoreBuffered
+            defer: false
+        ];
+
+        // Set window title
+        let title = NSString::from_str("splug - Standalone");
+        let _: () = objc2::msg_send![&*window, setTitle: &*title];
+
+        // 3. Get content view and create GUI context
+        let content_view: *mut AnyObject = objc2::msg_send![&*window, contentView];
+
+        println!("Creating GUI context...");
+        let mut gui_ctx = gui::GuiContext::attach(content_view as *mut c_void, 800, 600)?;
+
+        // 4. Set up event logging
+        println!("Setting up event logging...");
+        if let Some(window) = gui_ctx.get_window_mut() {
+            window.set_event_callback(|event| {
+                println!("Event: {:?}", event);
+            });
+        }
+
+        // 5. Make window visible
+        println!("Opening window...");
+        let _: () = objc2::msg_send![&*window, makeKeyAndOrderFront: std::ptr::null::<AnyObject>()];
+
+        // 6. Activate application
+        let _: () = objc2::msg_send![&*app, activateIgnoringOtherApps: true];
+
+        println!("\nWindow opened!");
+        println!("Close the window to exit.\n");
+
+        // 7. Run event loop
+        let _: () = objc2::msg_send![&*app, run];
+
+        // Clean up happens automatically via Drop
+        drop(gui_ctx);
+
+        println!("Shutting down...");
+    }
 
     Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn run_with_gui() -> Result<()> {
+    anyhow::bail!("GUI mode only supported on macOS for now (Phase 2.5)");
 }
 
 #[cfg(test)]

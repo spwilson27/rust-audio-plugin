@@ -136,6 +136,17 @@ impl GuiContext {
         use pal::NativeWindow;
         self.window.is_visible()
     }
+
+    /// Get mutable access to underlying window (for setting event callbacks)
+    #[cfg(target_os = "macos")]
+    pub fn get_window_mut(&mut self) -> Option<&mut pal::MacOSWindow> {
+        Some(&mut self.window)
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn get_window_mut(&mut self) -> Option<&mut pal::Win32Window> {
+        Some(&mut self.window)
+    }
 }
 
 #[cfg(test)]

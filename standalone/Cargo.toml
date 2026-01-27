@@ -11,9 +11,16 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-splug = { path = "../plugin" }
-
-# CLI argument parsing
 clap = { version = "4.5", features = ["derive"] }
+
+# GUI dependencies
+gui = { path = "../gui" }
+pal = { path = "../pal" }
+
+# Platform-specific dependencies for standalone window creation
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-foundation = { version = "0.2", features = ["NSString"] }
+objc2-app-kit = { version = "0.2", features = ["NSApplication", "NSWindow"] }
 
 [dev-dependencies]

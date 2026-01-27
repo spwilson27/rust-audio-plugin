@@ -60,6 +60,19 @@ pub struct MacOSWindow {
     width: u32,
     height: u32,
     scale_factor: f64,
+    // Event callback - will be called when events occur
+    // Using Option<Box<>> for now, Phase 2.3 will use lock-free queue
+    event_callback: Option<Box<dyn FnMut(UIEvent) + Send>>,
+}
+
+// Custom UIEvent type for PAL layer (re-export from gui in Phase 2.3)
+#[derive(Debug, Clone, Copy)]
+pub enum UIEvent {
+    MouseDown { x: f64, y: f64, button: u32 },
+    MouseUp { x: f64, y: f64, button: u32 },
+    MouseMove { x: f64, y: f64 },
+    KeyDown { keycode: u16 },
+    KeyUp { keycode: u16 },
 }
 
 impl crate::NativeWindow for MacOSWindow {
@@ -111,6 +124,7 @@ impl crate::NativeWindow for MacOSWindow {
             width,
             height,
             scale_factor,
+            event_callback: None,
         })
     }
 
@@ -160,6 +174,35 @@ impl Drop for MacOSWindow {
         // Remove from superview when dropped
         unsafe {
             let _: () = objc2::msg_send![&*self.view, removeFromSuperview];
+        }
+    }
+}
+
+impl MacOSWindow {
+    /// Set event callback for handling UI events
+    ///
+    /// This should be called on the main thread.
+    /// Events will be delivered on the main thread as well.
+    pub fn set_event_callback<F>(&mut self, callback: F)
+    where
+        F: FnMut(UIEvent) + Send + 'static,
+    {
+        self.event_callback = Some(Box::new(callback));
+
+        // TODO Phase 2.3: Create NSView subclass to deliver events
+        // Will need to:
+        // 1. Use objc2::declare::ClassBuilder to create RustPluginView subclass
+        // 2. Override acceptsFirstResponder to return YES
+        // 3. Override mouseDown:, mouseUp:, mouseMoved:, etc.
+        // 4. Store Rust callback pointer in associated object
+        // 5. Call Rust callback from Objective-C method implementations
+    }
+
+    /// Trigger an event (for testing or manual event injection)
+    #[allow(dead_code)]
+    fn trigger_event(&mut self, event: UIEvent) {
+        if let Some(ref mut callback) = self.event_callback {
+            callback(event);
         }
     }
 }
