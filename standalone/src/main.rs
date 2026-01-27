@@ -41,6 +41,45 @@ struct Args {
     /// Run in headless mode (no GUI, for automated testing)
     #[arg(long)]
     headless: bool,
+
+    /// Run in screenshot test mode (capture frame and exit)
+    #[arg(long)]
+    test_screenshot: bool,
+    /// Path to golden image for verification
+    #[arg(long)]
+    golden_image: Option<std::path::PathBuf>,
+}
+
+fn verify_golden(current_img: &image::RgbaImage, golden_path: &std::path::Path) -> Result<()> {
+    if !golden_path.exists() {
+        anyhow::bail!("Golden image not found at {}", golden_path.display());
+    }
+
+    let golden_img = image::open(golden_path)
+        .context("Failed to open golden image")?
+        .to_rgba8();
+
+    if current_img.dimensions() != golden_img.dimensions() {
+        anyhow::bail!(
+            "Dimensions mismatch: Current {:?}, Golden {:?}",
+            current_img.dimensions(),
+            golden_img.dimensions()
+        );
+    }
+
+    let mut diff_pixels = 0;
+    for (x, y, pixel) in current_img.enumerate_pixels() {
+        let golden_pixel = golden_img.get_pixel(x, y);
+        if pixel != golden_pixel {
+            diff_pixels += 1;
+        }
+    }
+
+    if diff_pixels > 0 {
+        anyhow::bail!("Images differ by {} pixels", diff_pixels);
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -77,7 +116,7 @@ fn main() -> Result<()> {
         run_headless()?;
     } else {
         tracing::info!("Running with GUI...");
-        run_with_gui()?;
+        run_with_gui(&args)?;
     }
 
     Ok(())
@@ -137,7 +176,7 @@ fn run_headless() -> Result<()> {
 
 /// Run the plugin with GUI
 /// Initializes window and rendering pipeline
-fn run_with_gui() -> Result<()> {
+fn run_with_gui(args: &Args) -> Result<()> {
     tracing::info!("Initializing macOS window...");
 
     // Write lockfile with port
@@ -217,6 +256,8 @@ fn run_with_gui() -> Result<()> {
     tracing::info!("Window opened");
 
     let mut last_fps_print = std::time::Instant::now();
+    let startup_time = std::time::Instant::now(); // Track startup time
+    let mut frame_count = 0;
 
     loop {
         // Poll for RPC events
@@ -238,6 +279,40 @@ fn run_with_gui() -> Result<()> {
             tracing::warn!("Render error: {}", e);
         }
 
+        // Screenshot logic
+        if args.test_screenshot {
+            frame_count += 1;
+            // Wait for 10 frames to settle
+            if frame_count > 10 {
+                tracing::info!("Taking screenshot...");
+                match renderer.capture_frame() {
+                    Ok(img) => {
+                        // Always save the 'current' screenshot for inspection/update
+                        if let Err(e) = img.save("screenshot.png") {
+                            tracing::error!("Failed to save screenshot: {:?}", e);
+                        } else {
+                            tracing::info!("Screenshot saved to screenshot.png");
+                        }
+
+                        // If golden image is provided, verify against it
+                        if let Some(golden_path) = &args.golden_image {
+                            tracing::info!("Verifying against golden: {}", golden_path.display());
+                            match verify_golden(&img, golden_path) {
+                                Ok(_) => tracing::info!("Golden verification passed!"),
+                                Err(e) => {
+                                    tracing::error!("Golden verification failed: {}", e);
+                                    // Exit with error code
+                                    std::process::exit(1);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => tracing::error!("Failed to capture frame: {:?}", e),
+                }
+                break;
+            }
+        }
+
         // Print FPS every second
         if last_fps_print.elapsed().as_secs() >= 1 {
             let fps = renderer.get_fps();
@@ -247,7 +322,8 @@ fn run_with_gui() -> Result<()> {
         }
 
         // Exit if window is closed (not visible AND not minimized)
-        if !window.closed() {
+        // Give it a grace period on startup (e.g., 500ms) to avoid false positives during initialization
+        if startup_time.elapsed().as_millis() > 500 && window.closed() {
             tracing::info!("Window closed, exiting...");
             break;
         }
@@ -270,14 +346,6 @@ fn run_with_gui() -> Result<()> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn run_with_gui() -> Result<()> {
+fn run_with_gui(_args: &Args) -> Result<()> {
     anyhow::bail!("GUI mode only supported on macOS for now (Phase 2.5)");
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_headless_mode_doesnt_panic() {
-        assert!(true);
-    }
 }

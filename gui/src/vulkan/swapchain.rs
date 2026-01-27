@@ -107,7 +107,12 @@ impl Swapchain {
             .image_color_space(format.color_space)
             .image_extent(extent)
             .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
+            // Added TRANSFER_SRC for screenshot capture
+            .image_usage(
+                vk::ImageUsageFlags::COLOR_ATTACHMENT
+                    | vk::ImageUsageFlags::TRANSFER_DST
+                    | vk::ImageUsageFlags::TRANSFER_SRC,
+            )
             .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
             .pre_transform(surface_caps.current_transform)
             .composite_alpha(composite_alpha)
@@ -171,6 +176,10 @@ impl Swapchain {
 
     pub fn image_views(&self) -> &[vk::ImageView] {
         &self.image_views
+    }
+
+    pub fn images(&self) -> &[vk::Image] {
+        &self.images
     }
 
     pub fn swapchain(&self) -> vk::SwapchainKHR {

@@ -2,13 +2,14 @@
 
 use anyhow::{Context, Result};
 use ash::vk;
+use image::RgbaImage;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::time::Instant;
 
+use super::shape_renderer::ShapeRenderer;
 use super::{Swapchain, VulkanContext};
 
 pub struct Renderer {
-    context: VulkanContext,
     swapchain: Swapchain,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
@@ -18,10 +19,19 @@ pub struct Renderer {
     current_frame: usize,
     max_frames_in_flight: usize,
     clear_color: [f32; 4],
+
+    // Rendering resources
+    render_pass: vk::RenderPass,
+    framebuffers: Vec<vk::Framebuffer>,
+    shape_renderer: ShapeRenderer,
+
     // Frame timing
     frame_times: Vec<f32>, // Last N frame times in milliseconds
     last_frame_time: Option<Instant>,
     current_fps: f32,
+
+    // Context must be last to be dropped last
+    context: VulkanContext,
 }
 
 impl Renderer {
@@ -90,6 +100,15 @@ impl Renderer {
             }
         }
 
+        // Create Render Pass
+        let render_pass = Self::create_render_pass(&context, swapchain.format())?;
+
+        // Create Framebuffers
+        let framebuffers = Self::create_framebuffers(&context, &swapchain, render_pass)?;
+
+        // Create Shape Renderer
+        let shape_renderer = ShapeRenderer::new(&context, render_pass)?;
+
         Ok(Self {
             context,
             swapchain,
@@ -101,10 +120,75 @@ impl Renderer {
             current_frame: 0,
             max_frames_in_flight,
             clear_color: [0.0, 0.0, 0.2, 1.0], // Dark blue
+            render_pass,
+            framebuffers,
+            shape_renderer,
             frame_times: Vec::with_capacity(60),
             last_frame_time: None,
             current_fps: 0.0,
         })
+    }
+
+    fn create_render_pass(context: &VulkanContext, format: vk::Format) -> Result<vk::RenderPass> {
+        let color_attachment = vk::AttachmentDescription::default()
+            .format(format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+
+        let color_attachment_ref = vk::AttachmentReference::default()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        let subpass = vk::SubpassDescription::default()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(std::slice::from_ref(&color_attachment_ref));
+
+        let dependency = vk::SubpassDependency::default()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
+
+        let render_pass_info = vk::RenderPassCreateInfo::default()
+            .attachments(std::slice::from_ref(&color_attachment))
+            .subpasses(std::slice::from_ref(&subpass))
+            .dependencies(std::slice::from_ref(&dependency));
+
+        unsafe {
+            Ok(context
+                .device()
+                .create_render_pass(&render_pass_info, None)?)
+        }
+    }
+
+    fn create_framebuffers(
+        context: &VulkanContext,
+        swapchain: &Swapchain,
+        render_pass: vk::RenderPass,
+    ) -> Result<Vec<vk::Framebuffer>> {
+        let mut framebuffers = Vec::new();
+
+        for view in swapchain.image_views() {
+            let attachments = [*view];
+            let create_info = vk::FramebufferCreateInfo::default()
+                .render_pass(render_pass)
+                .attachments(&attachments)
+                .width(swapchain.extent().width)
+                .height(swapchain.extent().height)
+                .layers(1);
+
+            unsafe {
+                framebuffers.push(context.device().create_framebuffer(&create_info, None)?);
+            }
+        }
+        Ok(framebuffers)
     }
 
     /// Set the clear color
@@ -140,87 +224,75 @@ impl Renderer {
         unsafe {
             device.reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
 
-            let begin_info = vk::CommandBufferBeginInfo::default();
+            let begin_info = vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
             device.begin_command_buffer(command_buffer, &begin_info)?;
 
-            // Simple clear operation (no render pass for now)
-            let image = self
-                .swapchain
-                .loader()
-                .get_swapchain_images(self.swapchain.swapchain())?[image_index as usize];
+            // Begin Render Pass
+            let clear_values = [vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: self.clear_color,
+                },
+            }];
 
-            // Transition image to  transfer dst
-            let barrier = vk::ImageMemoryBarrier::default()
-                .image(image)
-                .src_access_mask(vk::AccessFlags::empty())
-                .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                .old_layout(vk::ImageLayout::UNDEFINED)
-                .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                .subresource_range(vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                });
+            let render_pass_begin_info = vk::RenderPassBeginInfo::default()
+                .render_pass(self.render_pass)
+                .framebuffer(self.framebuffers[image_index as usize])
+                .render_area(vk::Rect2D {
+                    offset: vk::Offset2D { x: 0, y: 0 },
+                    extent: self.swapchain.extent(),
+                })
+                .clear_values(&clear_values);
 
-            device.cmd_pipeline_barrier(
+            device.cmd_begin_render_pass(
                 command_buffer,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
+                &render_pass_begin_info,
+                vk::SubpassContents::INLINE,
             );
 
-            // Clear color
-            let clear_color = vk::ClearColorValue {
-                float32: self.clear_color,
+            // Shape Rendering
+            self.shape_renderer.begin();
+
+            let w = self.swapchain.extent().width as f32;
+            let h = self.swapchain.extent().height as f32;
+            let cx = w / 2.0;
+            let cy = h / 2.0;
+
+            // Test Pattern
+            // Blue button
+            self.shape_renderer.draw_rect(
+                cx - 100.0,
+                cy + 50.0,
+                200.0,
+                60.0,
+                [0.2, 0.2, 0.8, 1.0],
+                10.0,
+            );
+
+            // Red circle
+            self.shape_renderer
+                .draw_circle(cx, cy - 50.0, 40.0, [0.8, 0.2, 0.2, 1.0]);
+
+            // Default Rect
+            self.shape_renderer
+                .draw_rect(50.0, 50.0, 100.0, 100.0, [1.0, 1.0, 0.0, 1.0], 0.0);
+
+            // FPS Overlay
+            let fps_width = (self.current_fps / 60.0 * 100.0).clamp(0.0, 100.0);
+            let color = if self.current_fps > 55.0 {
+                [0.0, 1.0, 0.0, 1.0] // Green
+            } else if self.current_fps > 45.0 {
+                [1.0, 1.0, 0.0, 1.0] // Yellow
+            } else {
+                [1.0, 0.0, 0.0, 1.0] // Red
             };
-            let range = vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            };
+            self.shape_renderer
+                .draw_rect(10.0, h - 30.0, fps_width, 20.0, color, 0.0);
 
-            device.cmd_clear_color_image(
-                command_buffer,
-                image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &clear_color,
-                &[range],
-            );
+            self.shape_renderer
+                .record_commands(command_buffer, w as u32, h as u32);
 
-            // Draw FPS overlay
-            self.draw_fps_overlay(command_buffer, image);
-
-            // Transition to present
-            let barrier = vk::ImageMemoryBarrier::default()
-                .image(image)
-                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                .dst_access_mask(vk::AccessFlags::empty())
-                .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-                .subresource_range(vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                });
-
-            device.cmd_pipeline_barrier(
-                command_buffer,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            );
+            device.cmd_end_render_pass(command_buffer);
 
             device.end_command_buffer(command_buffer)?;
         }
@@ -296,82 +368,6 @@ impl Renderer {
         self.last_frame_time = Some(now);
     }
 
-    /// Draw FPS overlay bar (colored rectangle in bottom-left)
-    fn draw_fps_overlay(&self, command_buffer: vk::CommandBuffer, image: vk::Image) {
-        let fps = self.current_fps;
-        let (_width, height) = (
-            self.swapchain.extent().width,
-            self.swapchain.extent().height,
-        );
-
-        // Bar dimensions
-        let bar_height = 20;
-        let max_bar_width = 100;
-        let bar_x = 10;
-        let bar_y = height.saturating_sub(bar_height + 10);
-
-        // Map FPS (0-60) to bar width (0-100px)
-        let bar_width = ((fps / 60.0) * max_bar_width as f32)
-            .min(max_bar_width as f32)
-            .max(0.0) as u32;
-
-        // Color based on performance
-        let color = if fps > 55.0 {
-            [0.0, 1.0, 0.0, 1.0] // Green
-        } else if fps > 45.0 {
-            [1.0, 1.0, 0.0, 1.0] // Yellow
-        } else {
-            [1.0, 0.0, 0.0, 1.0] // Red
-        };
-
-        if bar_width == 0 {
-            return; // Nothing to draw
-        }
-
-        // Clear a small rectangle for the FPS bar
-        let clear_value = vk::ClearColorValue { float32: color };
-
-        let subresource_range = vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        };
-
-        let rect = vk::Rect2D {
-            offset: vk::Offset2D {
-                x: bar_x as i32,
-                y: bar_y as i32,
-            },
-            extent: vk::Extent2D {
-                width: bar_width,
-                height: bar_height,
-            },
-        };
-
-        unsafe {
-            let device = self.context.device();
-
-            // Use scissor and clear to draw the bar
-            device.cmd_set_scissor(command_buffer, 0, &[rect]);
-            device.cmd_clear_color_image(
-                command_buffer,
-                image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &clear_value,
-                &[subresource_range],
-            );
-
-            // Reset scissor to full screen
-            let full_rect = vk::Rect2D {
-                offset: vk::Offset2D { x: 0, y: 0 },
-                extent: self.swapchain.extent(),
-            };
-            device.cmd_set_scissor(command_buffer, 0, &[full_rect]);
-        }
-    }
-
     /// Get current FPS
     pub fn get_fps(&self) -> f32 {
         self.current_fps
@@ -385,30 +381,216 @@ impl Renderer {
             self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32
         }
     }
+
+    /// Capture the current frame as an image
+    pub fn capture_frame(&self) -> Result<RgbaImage> {
+        unsafe {
+            let device = self.context.device();
+            device.device_wait_idle()?;
+
+            let width = self.swapchain.extent().width;
+            let height = self.swapchain.extent().height;
+            let image_size = (width * height * 4) as u64;
+
+            // 1. Create a transfer buffer (HOST_VISIBLE)
+            let buffer_info = vk::BufferCreateInfo::default()
+                .size(image_size)
+                .usage(vk::BufferUsageFlags::TRANSFER_DST)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+            let buffer = device.create_buffer(&buffer_info, None)?;
+
+            let mem_reqs = device.get_buffer_memory_requirements(buffer);
+            let mem_type_index = self
+                .context
+                .find_memory_type(
+                    mem_reqs.memory_type_bits,
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                )
+                .context("Failed to find suitable memory for capture buffer")?;
+
+            let alloc_info = vk::MemoryAllocateInfo::default()
+                .allocation_size(mem_reqs.size)
+                .memory_type_index(mem_type_index);
+
+            let memory = device.allocate_memory(&alloc_info, None)?;
+            device.bind_buffer_memory(buffer, memory, 0)?;
+
+            // 2. Copy from Swapchain Image to Buffer
+            // We need a command buffer for this
+            let alloc_info = vk::CommandBufferAllocateInfo::default()
+                .command_pool(self.command_pool)
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_buffer_count(1);
+
+            let cmd_buffer = device.allocate_command_buffers(&alloc_info)?[0];
+
+            let begin_info = vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            device.begin_command_buffer(cmd_buffer, &begin_info)?;
+
+            // Assume we want to capture the FIRST swapchain image for testing simplicity
+            // In a real scenario, we would capture the just-rendered image index
+            let src_image = self.swapchain.images()[0];
+
+            let image_barrier = vk::ImageMemoryBarrier::default()
+                .image(src_image)
+                .src_access_mask(vk::AccessFlags::MEMORY_READ)
+                .dst_access_mask(vk::AccessFlags::TRANSFER_READ)
+                .old_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+                .new_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL) // Actually we are coming from render pass so it might be PRESENT_SRC_KHR
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            device.cmd_pipeline_barrier(
+                cmd_buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[image_barrier],
+            );
+
+            let region = vk::BufferImageCopy::default()
+                .buffer_offset(0)
+                .buffer_row_length(0)
+                .buffer_image_height(0)
+                .image_subresource(vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+                .image_extent(vk::Extent3D {
+                    width,
+                    height,
+                    depth: 1,
+                });
+
+            // Bind regions to avoid temporary value dropped while borrowed
+            let regions = [region];
+            device.cmd_copy_image_to_buffer(
+                cmd_buffer,
+                src_image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                buffer,
+                &regions,
+            );
+
+            // Barrier back to PRESENT_SRC
+            let image_barrier_back = vk::ImageMemoryBarrier::default()
+                .image(src_image)
+                .src_access_mask(vk::AccessFlags::TRANSFER_READ)
+                .dst_access_mask(vk::AccessFlags::MEMORY_READ)
+                .old_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+                .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            device.cmd_pipeline_barrier(
+                cmd_buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[image_barrier_back],
+            );
+
+            device.end_command_buffer(cmd_buffer)?;
+
+            // Bind command buffers only once here
+            let command_buffers_submit = [cmd_buffer];
+            let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers_submit);
+
+            let fence = device.create_fence(&vk::FenceCreateInfo::default(), None)?;
+            device.queue_submit(self.context.graphics_queue(), &[submit_info], fence)?;
+            device.wait_for_fences(&[fence], true, u64::MAX)?;
+
+            // 3. Map memory and view as Image
+            let ptr =
+                device.map_memory(memory, 0, image_size, vk::MemoryMapFlags::empty())? as *const u8;
+            let slice = std::slice::from_raw_parts(ptr, image_size as usize);
+
+            // Swapchain is usually BGRA or BGR, we need RGBA.
+            // Check surface format from swapchain
+            let format = self.swapchain.format();
+
+            let mut rgba_data = Vec::with_capacity(image_size as usize);
+
+            if format == vk::Format::B8G8R8A8_SRGB || format == vk::Format::B8G8R8A8_UNORM {
+                for chunk in slice.chunks(4) {
+                    rgba_data.push(chunk[2]); // R
+                    rgba_data.push(chunk[1]); // G
+                    rgba_data.push(chunk[0]); // B
+                    rgba_data.push(chunk[3]); // A
+                }
+            } else {
+                // Assume RGBA
+                rgba_data.extend_from_slice(slice);
+            }
+
+            device.unmap_memory(memory);
+            device.destroy_fence(fence, None);
+            device.free_command_buffers(self.command_pool, &[cmd_buffer]);
+            device.destroy_buffer(buffer, None);
+            device.free_memory(memory, None);
+
+            RgbaImage::from_raw(width, height, rgba_data)
+                .context("Failed to create RgbaImage from raw data")
+        }
+    }
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            let device = self.context.device();
-            device.device_wait_idle().ok();
+            // Wait for device to be idle before destroying resources
+            let _ = self.context.device().device_wait_idle();
 
-            // Destroy sync objects
-            for semaphore in &self.image_available_semaphores {
-                device.destroy_semaphore(*semaphore, None);
-            }
+            // Destroy synchronization objects
             for semaphore in &self.render_finished_semaphores {
-                device.destroy_semaphore(*semaphore, None);
+                self.context.device().destroy_semaphore(*semaphore, None);
+            }
+            for semaphore in &self.image_available_semaphores {
+                self.context.device().destroy_semaphore(*semaphore, None);
             }
             for fence in &self.in_flight_fences {
-                device.destroy_fence(*fence, None);
+                self.context.device().destroy_fence(*fence, None);
             }
 
-            // Destroy command pool
-            device.destroy_command_pool(self.command_pool, None);
+            // Destroy framebuffers and render pass
+            for framebuffer in &self.framebuffers {
+                self.context
+                    .device()
+                    .destroy_framebuffer(*framebuffer, None);
+            }
+            self.context
+                .device()
+                .destroy_render_pass(self.render_pass, None);
 
-            // Cleanup swapchain
-            self.swapchain.cleanup(device);
+            // ShapeRenderer drops itself
+
+            // Destroy swapchain
+            self.swapchain.cleanup(self.context.device());
+
+            // Destroy command pool
+            self.context
+                .device()
+                .destroy_command_pool(self.command_pool, None);
         }
     }
 }

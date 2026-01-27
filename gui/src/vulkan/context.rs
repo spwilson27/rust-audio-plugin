@@ -309,6 +309,28 @@ impl VulkanContext {
     pub fn instance(&self) -> &ash::Instance {
         &self.instance
     }
+
+    pub fn find_memory_type(
+        &self,
+        type_filter: u32,
+        properties: vk::MemoryPropertyFlags,
+    ) -> Result<u32> {
+        let mem_properties = unsafe {
+            self.instance
+                .get_physical_device_memory_properties(self.physical_device)
+        };
+
+        for i in 0..mem_properties.memory_type_count {
+            if (type_filter & (1 << i)) != 0
+                && (mem_properties.memory_types[i as usize].property_flags & properties)
+                    == properties
+            {
+                return Ok(i);
+            }
+        }
+
+        anyhow::bail!("Failed to find suitable memory type")
+    }
 }
 
 impl Drop for VulkanContext {

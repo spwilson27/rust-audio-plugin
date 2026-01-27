@@ -2,6 +2,7 @@
 
 mod context;
 mod renderer;
+pub mod shape_renderer;
 mod swapchain;
 
 pub use context::VulkanContext;

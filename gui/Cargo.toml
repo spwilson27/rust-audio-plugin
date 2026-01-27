@@ -18,5 +18,5 @@ ash-window = "0.13"
 pal = { path = "../pal" }
 # render = { path = "../render" } # Phase 3
 tracing.workspace = true
-
+image.workspace = true
 [dev-dependencies]
