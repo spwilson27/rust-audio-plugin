@@ -42,7 +42,7 @@ impl RpcServer {
             .set_nonblocking(true)
             .context("Failed to set nonblocking")?;
 
-        println!("RPC Server listening on {}", local_addr);
+        tracing::info!("RPC Server listening on {}", local_addr);
 
         // Spawn a thread to run the server
         std::thread::spawn(move || {

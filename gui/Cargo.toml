@@ -17,5 +17,6 @@ ash-window = "0.13"
 # GUI framework will use pal and render crates
 pal = { path = "../pal" }
 # render = { path = "../render" } # Phase 3
+tracing.workspace = true
 
 [dev-dependencies]

@@ -44,15 +44,39 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    // Initialize logging to file
+    let log_file = tracing_appender::rolling::never("target", "splug.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
+
+    // File layer (no ANSI colors)
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(non_blocking)
+        .with_target(false)
+        .with_ansi(false)
+        .with_level(true);
+
+    // Stdout layer (with colors)
+    let stdout_layer = tracing_subscriber::fmt::layer()
+        .with_writer(std::io::stdout)
+        .with_target(false)
+        .with_level(true);
+
+    // Combine layers
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+    tracing_subscriber::registry()
+        .with(file_layer)
+        .with(stdout_layer)
+        .init();
+
     let args = Args::parse();
 
-    println!("splug standalone host v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!("splug standalone host v{}", env!("CARGO_PKG_VERSION"));
 
     if args.headless {
-        println!("Running in headless mode...");
+        tracing::info!("Running in headless mode...");
         run_headless()?;
     } else {
-        println!("Running with GUI...");
+        tracing::info!("Running with GUI...");
         run_with_gui()?;
     }
 
@@ -66,7 +90,7 @@ fn run_headless() -> Result<()> {
     use crossbeam_channel;
     use debug_server;
 
-    println!("Headless mode: Audio engine and RPC server would start here");
+    tracing::info!("Headless mode: Audio engine and RPC server would start here");
 
     // Setup RPC Server for testing (Headless)
     let (tx, _rx) = crossbeam_channel::unbounded();
@@ -78,24 +102,24 @@ fn run_headless() -> Result<()> {
 
     match debug_server::RpcServer::start(0, tx) {
         Ok(port) => {
-            println!("RPC Server started on port {}", port);
+            tracing::info!("RPC Server started on port {}", port);
             let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
             std::fs::write(&lockfile_path, json).context("Failed to write lockfile")?;
         }
         Err(e) => {
-            eprintln!("Failed to start RPC server: {}", e);
+            tracing::error!("Failed to start RPC server: {}", e);
         }
     }
 
-    println!("Press Ctrl+C to exit");
+    tracing::info!("Press Ctrl+C to exit");
 
     // Poll loop for headless mode
     loop {
         // Since we don't have an EventRouter/Window in headless, we read directly from rx
         while let Ok(event) = _rx.try_recv() {
-            println!("Headless received event: {:?}", event);
+            tracing::debug!("Headless received event: {:?}", event);
             if let pal::UIEvent::Quit = event {
-                println!("Headless received Quit signal, exiting...");
+                tracing::info!("Headless received Quit signal, exiting...");
                 // Wait a bit to allow RPC response to flush
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 return Ok(()); // return from run_headless, effectively exiting main
@@ -114,9 +138,7 @@ fn run_headless() -> Result<()> {
 /// Run the plugin with GUI
 /// Initializes window and rendering pipeline
 fn run_with_gui() -> Result<()> {
-    println!("Initializing macOS window...");
-
-    println!("Initializing macOS window...");
+    tracing::info!("Initializing macOS window...");
 
     // Write lockfile with port
     let pid = std::process::id();
@@ -142,11 +164,11 @@ fn run_with_gui() -> Result<()> {
     window.set_size(800, 600)?;
 
     // 2.5. Initialize Vulkan renderer
-    println!("Initializing Vulkan renderer...");
+    tracing::info!("Initializing Vulkan renderer...");
     let window_handle = WindowHandleWrapper(&*window);
     let mut renderer = gui::Renderer::new(&window_handle, 800, 600)
         .context("Failed to initialize Vulkan renderer")?;
-    println!("Vulkan initialized!");
+    tracing::info!("Vulkan initialized!");
 
     // 3. Setup RPC Server for testing
     // Create a channel for UI events
@@ -158,12 +180,12 @@ fn run_with_gui() -> Result<()> {
     // Start RPC server
     match debug_server::RpcServer::start(0, tx) {
         Ok(port) => {
-            println!("RPC Server started on port {}", port);
+            tracing::info!("RPC Server started on port {}", port);
             let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
             std::fs::write(&lockfile_path, json).context("Failed to write lockfile")?;
         }
         Err(e) => {
-            eprintln!("Failed to start RPC server: {}", e);
+            tracing::error!("Failed to start RPC server: {}", e);
         }
     }
 
@@ -175,17 +197,24 @@ fn run_with_gui() -> Result<()> {
     let should_quit = Arc::new(AtomicBool::new(false));
     let should_quit_cb = should_quit.clone();
 
-    // Call set_callback on the EventRouter directly
-    window.event_router().set_callback(move |event| {
-        if let UIEvent::Quit = event {
-            should_quit_cb.store(true, Ordering::Relaxed);
-        }
-        // RenderFrame events fire continuously from CVDisplayLink
-        // Actual rendering happens in main loop
-    });
+    // Track window focus state
+    let window_focused = Arc::new(AtomicBool::new(true)); // Start focused
+    let window_focused_cb = window_focused.clone();
 
-    println!("\nWindow opened!");
-    println!("Close the window to exit.\n");
+    // Call set_callback on the EventRouter directly
+    window
+        .event_router()
+        .set_callback(move |event| match event {
+            UIEvent::Quit => {
+                should_quit_cb.store(true, Ordering::Relaxed);
+            }
+            UIEvent::FocusChanged(focused) => {
+                window_focused_cb.store(focused, Ordering::Relaxed);
+            }
+            _ => {}
+        });
+
+    tracing::info!("Window opened");
 
     let mut last_fps_print = std::time::Instant::now();
 
@@ -195,7 +224,7 @@ fn run_with_gui() -> Result<()> {
 
         // Check for quit signal from RPC
         if should_quit.load(Ordering::Relaxed) {
-            println!("Received Quit signal, exiting...");
+            tracing::info!("Received Quit signal, exiting...");
             // Wait a bit to allow RPC response to flush
             std::thread::sleep(std::time::Duration::from_millis(500));
             break;
@@ -206,25 +235,30 @@ fn run_with_gui() -> Result<()> {
 
         // Render frame - CVDisplayLink triggers events but we render from main thread
         if let Err(e) = renderer.draw_frame() {
-            eprintln!("Render error: {}", e);
+            tracing::warn!("Render error: {}", e);
         }
 
         // Print FPS every second
         if last_fps_print.elapsed().as_secs() >= 1 {
             let fps = renderer.get_fps();
             let avg_frame_time = renderer.get_avg_frame_time();
-            println!("FPS: {:.1} | Avg frame time: {:.2}ms", fps, avg_frame_time);
+            tracing::debug!("FPS: {:.1} | Avg frame time: {:.2}ms", fps, avg_frame_time);
             last_fps_print = std::time::Instant::now();
         }
 
         // Exit if window is closed (not visible AND not minimized)
         if !window.closed() {
-            println!("Window closed, exiting...");
+            tracing::info!("Window closed, exiting...");
             break;
         }
 
-        // Sleep just 1ms to yield CPU but not cap frame rate
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        // Adjust sleep based on focus: 1ms when focused, 10ms when unfocused
+        let sleep_ms = if window_focused.load(Ordering::Relaxed) {
+            1 // Focused: low latency for smooth 60 FPS
+        } else {
+            10 // Unfocused: save CPU
+        };
+        std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
     }
 
     // Unreachable loop but compiler doesn't know for sure if we break

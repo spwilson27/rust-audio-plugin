@@ -21,6 +21,9 @@ license = "MIT OR Apache-2.0"
 anyhow = "1.0"
 prost = "0.13"
 raw-window-handle = "0.6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
 
 [profile.release]
 opt-level = 3

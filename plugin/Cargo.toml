@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 anyhow.workspace = true
 raw-window-handle.workspace = true
+tracing.workspace = true
 
 # VST3/CLAP bindings will be added in Phase 4
 # For now, we're implementing the build system and skeleton structure

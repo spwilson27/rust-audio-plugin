@@ -337,9 +337,9 @@ unsafe extern "system" fn vulkan_debug_callback(
     let message = CStr::from_ptr((*p_callback_data).p_message);
 
     if message_severity.contains(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR) {
-        eprintln!("[Vulkan Error] {:?}", message);
+        tracing::error!("[Vulkan Error] {:?}", message);
     } else if message_severity.contains(vk::DebugUtilsMessageSeverityFlagsEXT::WARNING) {
-        eprintln!("[Vulkan Warning] {:?}", message);
+        tracing::warn!("[Vulkan Warning] {:?}", message);
     }
 
     vk::FALSE

@@ -49,6 +49,8 @@ pub enum UIEvent {
     Quit,
     /// Display sync callback - time to render a new frame
     RenderFrame,
+    /// Window focus changed (true = gained focus, false = lost focus)
+    FocusChanged(bool),
 }
 
 /// Core trait for platform-specific window implementations

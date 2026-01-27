@@ -333,7 +333,7 @@ Use this as a high-level verification before moving to the next phase:
   - [x] Standalone: Window closes cleanly and app terminates
   - [ ] Test: Standalone shows 60 FPS counter and responds to clicks (window works, events/rendering pending)
 
-- [/] **Phase 3 Complete (In Progress):**
+- [/] **Phase 3 Complete:**
   - [x] Vulkan context initializes on macOS (MoltenVK)
   - [x] Swapchain creation with proper format selection
   - [x] Basic renderer with clear-color operations
@@ -342,7 +342,10 @@ Use this as a high-level verification before moving to the next phase:
   - [ ] Vulkan context initializes on Windows
   - [ ] Graceful fallback on Vulkan init failure
   - [x] CVDisplayLink running at 60 FPS
-  - [/] FPS tracking and debug overlay
+  - [x] FPS tracking and debug overlay
+  - [x] Visual FPS bar (green/yellow/red based on performance)
+  - [x] Window focus detection and adaptive CPU usage
+  - [x] File-based logging system (target/splug.log)
   - [ ] SVG rasterizes crisply at multiple window sizes
   - [ ] DPI scaling works on Retina displays
   - [ ] Test: Circle SVG stays sharp when resizing

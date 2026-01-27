@@ -48,7 +48,7 @@ pub unsafe extern "C" fn GetPluginFactory() -> *mut c_void {
         Ok(factory) => factory,
         Err(e) => {
             // Log the panic (in a real implementation, write to file)
-            eprintln!("PANIC in GetPluginFactory: {:?}", e);
+            tracing::error!("PANIC in GetPluginFactory: {:?}", e);
             std::ptr::null_mut()
         }
     }
