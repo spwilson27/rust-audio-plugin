@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "plugin",
+    "standalone",
+    "xtask",
+    "definitions",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Shared dependencies across workspace
+anyhow = "1.0"
+prost = "0.13"
+raw-window-handle = "0.6"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

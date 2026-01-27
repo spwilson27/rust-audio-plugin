@@ -213,7 +213,6 @@ Here is the sequential execution plan. Feed these prompts to the agent one by on
 > * Asserts that the metering RMS level is within expected range (proving audio processing occurred).
 > * Tests the Headless Host harness by loading the plugin and executing the resize edge cases."
 > 
-> 
 
 ---
 

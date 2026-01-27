@@ -1,0 +1,22 @@
+[package]
+name = "splug"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "splug"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow.workspace = true
+raw-window-handle.workspace = true
+
+# VST3/CLAP bindings will be added in Phase 4
+# For now, we're implementing the build system and skeleton structure
+
+# For catching panics at FFI boundary
+# (using std::panic::catch_unwind, no additional deps needed)
+
+[dev-dependencies]

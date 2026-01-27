@@ -1,0 +1,21 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+
+# CLI parsing
+clap = { version = "4.5", features = ["derive"] }
+
+# File system operations
+walkdir = "2.5"
+
+[dev-dependencies]

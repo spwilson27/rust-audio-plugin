@@ -1,0 +1,18 @@
+[package]
+name = "definitions"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "definitions"
+
+[dependencies]
+prost.workspace = true
+
+# Build-time protobuf code generation
+[build-dependencies]
+prost-build = "0.13"
+
+[dev-dependencies]
