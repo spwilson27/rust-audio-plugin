@@ -13,6 +13,38 @@ use anyhow::{Context, Result};
 use raw_window_handle::{AppKitWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
 
+// CVDisplayLink FFI declarations (CoreVideo framework)
+type CVDisplayLinkRef = *mut c_void;
+type CVReturn = i32;
+type CVOptionFlags = u64;
+
+#[repr(C)]
+struct CVTimeStamp {
+    _data: [u8; 96], // Opaque structure
+}
+
+#[link(name = "CoreVideo", kind = "framework")]
+extern "C" {
+    fn CVDisplayLinkCreateWithActiveCGDisplays(display_link: *mut CVDisplayLinkRef) -> CVReturn;
+    fn CVDisplayLinkSetOutputCallback(
+        display_link: CVDisplayLinkRef,
+        callback: extern "C" fn(
+            CVDisplayLinkRef,
+            *const CVTimeStamp,
+            *const CVTimeStamp,
+            CVOptionFlags,
+            *mut CVOptionFlags,
+            *mut c_void,
+        ) -> CVReturn,
+        user_info: *mut c_void,
+    ) -> CVReturn;
+    fn CVDisplayLinkStart(display_link: CVDisplayLinkRef) -> CVReturn;
+    fn CVDisplayLinkStop(display_link: CVDisplayLinkRef) -> CVReturn;
+    fn CVDisplayLinkRelease(display_link: CVDisplayLinkRef);
+}
+
+const K_CV_RETURN_SUCCESS: CVReturn = 0;
+
 use objc2::encode::{Encode, Encoding};
 // use objc2::msg_send_id;
 use objc2::rc::Retained;
@@ -324,6 +356,26 @@ pub struct MacOSWindow {
     // In standalone, we leak it or keep it here.
     #[allow(dead_code)]
     _owned_window: Option<Retained<AnyObject>>,
+    // CVDisplayLink for vsync rendering
+    display_link: Option<CVDisplayLinkRef>,
+}
+
+/// CVDisplayLink callback - called at display refresh rate (~60 FPS)
+extern "C" fn display_link_callback(
+    _display_link: CVDisplayLinkRef,
+    _in_now: *const CVTimeStamp,
+    _in_output_time: *const CVTimeStamp,
+    _flags_in: CVOptionFlags,
+    _flags_out: *mut CVOptionFlags,
+    user_info: *mut c_void,
+) -> CVReturn {
+    unsafe {
+        crate::EventRouter::unsafe_post_from_ptr(
+            user_info as *const crate::EventRouter,
+            crate::UIEvent::RenderFrame,
+        );
+    }
+    K_CV_RETURN_SUCCESS
 }
 
 impl crate::NativeWindow for MacOSWindow {
@@ -400,13 +452,14 @@ impl crate::NativeWindow for MacOSWindow {
         };
 
         // Create MacOSWindow with Boxed EventRouter for stable address
-        let window = MacOSWindow {
+        let mut window = MacOSWindow {
             view,
             width,
             height,
             scale_factor,
             event_router: Box::new(crate::EventRouter::new()),
             _owned_window,
+            display_link: None, // Will be created after setting up event router
         };
 
         // Store EventRouter pointer in view's associated objects so event handlers can access it
@@ -426,6 +479,17 @@ impl crate::NativeWindow for MacOSWindow {
                 key.as_ptr(),
                 router_ptr,
             );
+
+            // Create and start CVDisplayLink for vsync rendering
+            let mut display_link: CVDisplayLinkRef = std::ptr::null_mut();
+            if CVDisplayLinkCreateWithActiveCGDisplays(&mut display_link) == K_CV_RETURN_SUCCESS {
+                let callback_result =
+                    CVDisplayLinkSetOutputCallback(display_link, display_link_callback, router_ptr);
+                if callback_result == K_CV_RETURN_SUCCESS {
+                    CVDisplayLinkStart(display_link);
+                    window.display_link = Some(display_link);
+                }
+            }
         }
 
         Ok(window)
@@ -502,6 +566,14 @@ impl crate::NativeWindow for MacOSWindow {
 
 impl Drop for MacOSWindow {
     fn drop(&mut self) {
+        // Stop and release CVDisplayLink
+        if let Some(display_link) = self.display_link {
+            unsafe {
+                CVDisplayLinkStop(display_link);
+                CVDisplayLinkRelease(display_link);
+            }
+        }
+
         // Remove from superview when dropped
         unsafe {
             let _: () = objc2::msg_send![&*self.view, removeFromSuperview];

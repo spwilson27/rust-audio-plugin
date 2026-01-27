@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use ash::vk;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+use std::time::Instant;
 
 use super::{Swapchain, VulkanContext};
 
@@ -17,6 +18,10 @@ pub struct Renderer {
     current_frame: usize,
     max_frames_in_flight: usize,
     clear_color: [f32; 4],
+    // Frame timing
+    frame_times: Vec<f32>, // Last N frame times in milliseconds
+    last_frame_time: Option<Instant>,
+    current_fps: f32,
 }
 
 impl Renderer {
@@ -96,6 +101,9 @@ impl Renderer {
             current_frame: 0,
             max_frames_in_flight,
             clear_color: [0.0, 0.0, 0.2, 1.0], // Dark blue
+            frame_times: Vec::with_capacity(60),
+            last_frame_time: None,
+            current_fps: 0.0,
         })
     }
 
@@ -106,6 +114,9 @@ impl Renderer {
 
     /// Draw a single frame
     pub fn draw_frame(&mut self) -> Result<()> {
+        // Update frame timing
+        self.update_frame_timing();
+
         let device = self.context.device();
 
         // Wait for previous frame
@@ -183,6 +194,9 @@ impl Renderer {
                 &[range],
             );
 
+            // Draw FPS overlay
+            self.draw_fps_overlay(command_buffer, image);
+
             // Transition to present
             let barrier = vk::ImageMemoryBarrier::default()
                 .image(image)
@@ -252,6 +266,124 @@ impl Renderer {
         self.current_frame = (self.current_frame + 1) % self.max_frames_in_flight;
 
         Ok(())
+    }
+
+    /// Update frame timing and calculate FPS
+    fn update_frame_timing(&mut self) {
+        let now = Instant::now();
+
+        if let Some(last) = self.last_frame_time {
+            let frame_time_ms = now.duration_since(last).as_secs_f32() * 1000.0;
+
+            // Rolling window of 60 frames
+            if self.frame_times.len() >= 60 {
+                self.frame_times.remove(0);
+            }
+            self.frame_times.push(frame_time_ms);
+
+            // Calculate FPS from average frame time
+            if !self.frame_times.is_empty() {
+                let avg_frame_time: f32 =
+                    self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;
+                self.current_fps = if avg_frame_time > 0.0 {
+                    1000.0 / avg_frame_time
+                } else {
+                    0.0
+                };
+            }
+        }
+
+        self.last_frame_time = Some(now);
+    }
+
+    /// Draw FPS overlay bar (colored rectangle in bottom-left)
+    fn draw_fps_overlay(&self, command_buffer: vk::CommandBuffer, image: vk::Image) {
+        let fps = self.current_fps;
+        let (_width, height) = (
+            self.swapchain.extent().width,
+            self.swapchain.extent().height,
+        );
+
+        // Bar dimensions
+        let bar_height = 20;
+        let max_bar_width = 100;
+        let bar_x = 10;
+        let bar_y = height.saturating_sub(bar_height + 10);
+
+        // Map FPS (0-60) to bar width (0-100px)
+        let bar_width = ((fps / 60.0) * max_bar_width as f32)
+            .min(max_bar_width as f32)
+            .max(0.0) as u32;
+
+        // Color based on performance
+        let color = if fps > 55.0 {
+            [0.0, 1.0, 0.0, 1.0] // Green
+        } else if fps > 45.0 {
+            [1.0, 1.0, 0.0, 1.0] // Yellow
+        } else {
+            [1.0, 0.0, 0.0, 1.0] // Red
+        };
+
+        if bar_width == 0 {
+            return; // Nothing to draw
+        }
+
+        // Clear a small rectangle for the FPS bar
+        let clear_value = vk::ClearColorValue { float32: color };
+
+        let subresource_range = vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 1,
+        };
+
+        let rect = vk::Rect2D {
+            offset: vk::Offset2D {
+                x: bar_x as i32,
+                y: bar_y as i32,
+            },
+            extent: vk::Extent2D {
+                width: bar_width,
+                height: bar_height,
+            },
+        };
+
+        unsafe {
+            let device = self.context.device();
+
+            // Use scissor and clear to draw the bar
+            device.cmd_set_scissor(command_buffer, 0, &[rect]);
+            device.cmd_clear_color_image(
+                command_buffer,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &clear_value,
+                &[subresource_range],
+            );
+
+            // Reset scissor to full screen
+            let full_rect = vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: self.swapchain.extent(),
+            };
+            device.cmd_set_scissor(command_buffer, 0, &[full_rect]);
+        }
+    }
+
+    /// Get current FPS
+    pub fn get_fps(&self) -> f32 {
+        self.current_fps
+    }
+
+    /// Get average frame time in milliseconds
+    pub fn get_avg_frame_time(&self) -> f32 {
+        if self.frame_times.is_empty() {
+            0.0
+        } else {
+            self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32
+        }
     }
 }
 

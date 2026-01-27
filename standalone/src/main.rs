@@ -177,14 +177,17 @@ fn run_with_gui() -> Result<()> {
 
     // Call set_callback on the EventRouter directly
     window.event_router().set_callback(move |event| {
-        println!("Received event (Main): {:?}", event);
         if let UIEvent::Quit = event {
             should_quit_cb.store(true, Ordering::Relaxed);
         }
+        // RenderFrame events fire continuously from CVDisplayLink
+        // Actual rendering happens in main loop
     });
 
     println!("\nWindow opened!");
     println!("Close the window to exit.\n");
+
+    let mut last_fps_print = std::time::Instant::now();
 
     loop {
         // Poll for RPC events
@@ -201,10 +204,17 @@ fn run_with_gui() -> Result<()> {
         // Poll system events via PAL
         app.poll_events();
 
-        // Render frame
+        // Render frame - CVDisplayLink triggers events but we render from main thread
         if let Err(e) = renderer.draw_frame() {
             eprintln!("Render error: {}", e);
-            // Continue for now, might be OUT_OF_DATE
+        }
+
+        // Print FPS every second
+        if last_fps_print.elapsed().as_secs() >= 1 {
+            let fps = renderer.get_fps();
+            let avg_frame_time = renderer.get_avg_frame_time();
+            println!("FPS: {:.1} | Avg frame time: {:.2}ms", fps, avg_frame_time);
+            last_fps_print = std::time::Instant::now();
         }
 
         // Exit if window is closed (not visible AND not minimized)
@@ -213,8 +223,8 @@ fn run_with_gui() -> Result<()> {
             break;
         }
 
-        // Sleep a tiny bit to avoid 100% CPU in this naive loop
-        std::thread::sleep(std::time::Duration::from_millis(16));
+        // Sleep just 1ms to yield CPU but not cap frame rate
+        std::thread::sleep(std::time::Duration::from_millis(1));
     }
 
     // Unreachable loop but compiler doesn't know for sure if we break

@@ -60,6 +60,19 @@ impl EventRouter {
     pub fn inject_event(&mut self, event: UIEvent) {
         self.route_event(event);
     }
+
+    /// Post an event from a raw pointer (UNSAFE - for C callbacks only)
+    ///
+    /// # Safety
+    ///
+    /// The pointer must be valid and point to a live EventRouter.
+    /// This is used from CVDisplayLink callback which is called from a different thread.
+    pub unsafe fn unsafe_post_from_ptr(router_ptr: *const EventRouter, event: UIEvent) {
+        if !router_ptr.is_null() {
+            let router = &mut *(router_ptr as *mut EventRouter);
+            router.route_event(event);
+        }
+    }
 }
 
 impl Default for EventRouter {

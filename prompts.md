@@ -333,10 +333,16 @@ Use this as a high-level verification before moving to the next phase:
   - [x] Standalone: Window closes cleanly and app terminates
   - [ ] Test: Standalone shows 60 FPS counter and responds to clicks (window works, events/rendering pending)
 
-- [ ] **Phase 3 Complete:**
-  - [ ] Vulkan context initializes on macOS (MoltenVK)
+- [/] **Phase 3 Complete (In Progress):**
+  - [x] Vulkan context initializes on macOS (MoltenVK)
+  - [x] Swapchain creation with proper format selection
+  - [x] Basic renderer with clear-color operations
+  - [x] All Vulkan validation errors fixed
+  - [x] E2E test for Vulkan validation (`vulkan_validation.rs`)
   - [ ] Vulkan context initializes on Windows
   - [ ] Graceful fallback on Vulkan init failure
+  - [x] CVDisplayLink running at 60 FPS
+  - [/] FPS tracking and debug overlay
   - [ ] SVG rasterizes crisply at multiple window sizes
   - [ ] DPI scaling works on Retina displays
   - [ ] Test: Circle SVG stays sharp when resizing
@@ -345,6 +351,8 @@ Use this as a high-level verification before moving to the next phase:
   - [ ] All FFI entry points wrapped in `catch_unwind`
   - [ ] Audio `process()` is wait-free (no allocations)
   - [ ] `rtrb` queues for parameter changes and metering
+  - [ ] Design and implement generic configuration structs for plugin global config using Redb as backend
+  - [ ] Design and implement shared generic parameter values between GUI and Audio Thread, should support different types of data (float, int, bool, enum, etc)
   - [ ] Redb database never accessed from Audio Thread
   - [ ] Worker Thread handles all Redb transactions
   - [ ] Protobuf schema defined with versioning
@@ -363,3 +371,49 @@ Use this as a high-level verification before moving to the next phase:
 ---
 
 This updated prompt document now captures all critical architectural details from `architecture_v2.md`, ensuring agents have complete context for robust implementation.
+---
+
+## Current Status (Updated 2026-01-26)
+
+### ✅ Phase 3.1: Vulkan Initialization - COMPLETE
+
+**Completed Work:**
+- Vulkan context, device, and surface creation (`gui/src/vulkan/context.rs`)
+- Swapchain management with format selection (`gui/src/vulkan/swapchain.rs`)  
+- Basic clear-color renderer (`gui/src/vulkan/renderer.rs`)
+- Integration with standalone app via native window handles
+- **All Vulkan validation errors fixed:**
+  - Added `VK_IMAGE_USAGE_TRANSFER_DST_BIT` to swapchain
+  - Per-image semaphore synchronization
+  - macOS instance extension dependencies
+- Automated E2E test: `standalone/tests/vulkan_validation.rs`
+
+---
+
+## Proposed Next Steps
+
+### Option A: Phase 3.2 - CVDisplayLink (60 FPS Render Loop)
+**Priority: HIGH** - Foundation for smooth rendering
+
+**Tasks:**
+1. Implement `CVDisplayLink` in `pal/src/macos.rs`
+2. Wire vsync events through event router
+3. Call `renderer.draw_frame()` at display refresh rate
+4. Add frame timing verification
+
+**Benefit:** Proper time-driven rendering at 60 FPS  
+**Complexity:** Medium (2-3 hours)
+
+---
+
+### Option B: Phase 3.3 - Shape Rendering Pipeline
+**Priority: MEDIUM** - Validates full graphics pipeline
+
+**Tasks:**
+1. Create render passes and framebuffers
+2. Write vertex/fragment shaders (triangle/quad)
+3. Build graphics pipeline
+4. Render test geometry
+
+**Benefit:** Full Vulkan pipeline validation  
+**Complexity:** Medium-High (4-6 hours)
