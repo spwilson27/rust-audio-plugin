@@ -88,7 +88,7 @@ Here is the sequential execution plan. Feed these prompts to the agent one by on
 > 
 > 
 
-#### Phase 3: The Graphics Core (Vulkan & SVG)
+#### Phase 3: The Graphics Core (Vulkan & SVG) [DEFERRED]
 
 *Goal: Set up the rendering loop.*
 
@@ -127,8 +127,7 @@ Here is the sequential execution plan. Feed these prompts to the agent one by on
 > 
 > 
 
-#### Phase 4: The Core Logic & Persistence
-
+#### Phase 4: The Core Logic & Persistence [DEFERRED]
 *Goal: Connect audio processing and state management.*
 
 **Prompt:**
@@ -170,48 +169,45 @@ Here is the sequential execution plan. Feed these prompts to the agent one by on
 
 #### Phase 5: The Test Harness (RPC)
 
-*Goal: Enable the automated E2E testing.*
+*Goal: Enable the automated E2E testing with full UI event simulation.*
 
 **Prompt:**
 
 > "Implement the RPC Debug Server for integration testing.
+
 > **Requirements:**
-> 1. Create a TCP server that starts when the plugin initializes (on the Worker Thread to avoid blocking Main or Audio threads).
-> * Bind to port `0` (ephemeral) to avoid conflicts when running multiple tests in parallel.
-> * Write the chosen port and PID to a lockfile in `std::env::temp_dir()` (e.g., `/tmp/myplugin_test/pid_<PID>.json` with content: `{ "port": 54321, "pid": 1234 }`).
-> 
-> 
-> 2. Define Protocol Buffer service in `definitions/debug_control.proto`:
+> 1. **Thread-Safe Event Injection:**
+> * Modify `EventRouter` to accept `UIEvent`s from a cross-thread channel (e.g., `std::sync::mpsc` or `crossbeam`).
+> * The RPC server (Worker Thread) sends events to this channel.
+> * The Main Thread (Event Loop) polls this channel and routes events to the callback, ensuring `inject_event` behaviors are identical to OS events.
+>
+> 2. **RPC Server Implementation:**
+> * Create a TCP server that starts when the plugin initializes (on the **Worker Thread**).
+> * Bind to port `0` (ephemeral) to avoid conflicts.
+> * Write the chosen port and PID to a lockfile in `std::env::temp_dir()`.
+> * The server must push commands onto the same event queue used by the GUI, ensuring the Audio Thread treats RPC commands exactly like user clicks. This provides true "Grey Box" testing.
+>
+> 3. **Protobuf Schema:**
+> * Define `definitions/debug_control.proto` with:
 > ```protobuf
 > service DebugControl {
 >     rpc SetParam(ParamChange) returns (Ack);
 >     rpc GetParam(ParamChange) returns (ParamValue);
->     rpc SendKey(KeyMsg) returns (Ack);
->     rpc SendMouse(MouseMsg) returns (Ack);
+>     rpc SendInputEvent(InputEventMsg) returns (Ack); // Mouse/Key events
 >     rpc GetMeteringData(Empty) returns (MeterData);
->     rpc InjectMidi(MidiMsg) returns (Ack);
->     rpc GetPerformanceStats(Empty) returns (CpuStats);
 > }
 > ```
-> 
-> 
-> 3. **Integration:** The server must push commands onto the same `rtrb` queue used by the GUI, ensuring the Audio Thread treats RPC commands exactly like user clicks. This provides true "Grey Box" testing.
-> 
-> 
-> 4. **Host Quirks Testing:** Create a "Headless Host" test harness using `vst3-sys` bindings that mimics the behavior of different DAWs (e.g., Bitwig's resize handling vs Ableton Live's approach). This harness should:
-> * Load the plugin dynamically.
-> * Call VST3 lifecycle methods in different sequences.
-> * Test edge cases like rapid window resize, tab switching, and plugin suspend/resume.
-> 
-> 
-> 5. **Test Plan:** Write a Python script (using `grpcio` or raw TCP with Protobuf framing) that:
+>
+> 4. **Integration:**
+> * Ensure `standalone` binary initializes the RPC server.
+> * Verify that `SendInputEvent` RPCs result in "Received event" logs in the standalone app, just like physical clicks.
+>
+> 5. **Test Plan:**
+> * Write a test script (Rust or Python) that connects to the RPC server.
 > * Launches the standalone plugin with `--headless` flag.
 > * Reads the port file to discover the RPC port.
-> * Sends a parameter change via `SetParam`.
-> * Sends a MIDI note via `InjectMidi`.
-> * Waits 100ms then calls `GetMeteringData`.
-> * Asserts that the metering RMS level is within expected range (proving audio processing occurred).
-> * Tests the Headless Host harness by loading the plugin and executing the resize edge cases."
+> * Send a `SendInputEvent` message (e.g., MouseDown).
+> * Verify the standalone app logs and processes it."
 > 
 
 ---

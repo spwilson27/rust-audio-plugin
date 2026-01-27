@@ -13,19 +13,24 @@ use crate::UIEvent;
 /// injected events (from RPC debug server) to be handled uniformly.
 pub struct EventRouter {
     callback: Option<Box<dyn FnMut(UIEvent) + Send>>,
+    receiver: Option<crossbeam_channel::Receiver<UIEvent>>,
 }
 
 impl EventRouter {
-    /// Create a new event router with no callback registered
+    /// Create a new event router
     pub fn new() -> Self {
-        Self { callback: None }
+        Self {
+            callback: None,
+            receiver: None,
+        }
+    }
+
+    /// Set the channel receiver for injected events (e.g. from RPC server)
+    pub fn set_event_receiver(&mut self, receiver: crossbeam_channel::Receiver<UIEvent>) {
+        self.receiver = Some(receiver);
     }
 
     /// Set the callback that will receive all routed events
-    ///
-    /// # Thread Safety
-    /// This must be called on the main thread. The callback will be invoked
-    /// on the main thread when events are routed.
     pub fn set_callback<F>(&mut self, callback: F)
     where
         F: FnMut(UIEvent) + Send + 'static,
@@ -34,23 +39,24 @@ impl EventRouter {
     }
 
     /// Route an event to the registered callback
-    ///
-    /// This is called by platform-specific event handlers (e.g., NSView methods)
-    /// to deliver hardware events.
     pub fn route_event(&mut self, event: UIEvent) {
         if let Some(ref mut callback) = self.callback {
             callback(event);
         }
     }
 
-    /// Inject an event programmatically
-    ///
-    /// This is intended for use by the RPC debug server (Phase 5) to simulate
-    /// user input for automated testing.
-    ///
-    /// # Thread Safety
-    /// This must be called on the main thread to avoid race conditions with
-    /// hardware event delivery.
+    /// Poll for injected events from the receiver and route them
+    /// Should be called periodically on the main thread
+    pub fn poll_events(&mut self) {
+        if let Some(ref receiver) = self.receiver {
+            let rx = receiver.clone(); // Clone receiver to avoid borrowing self
+            while let Ok(event) = rx.try_recv() {
+                self.route_event(event);
+            }
+        }
+    }
+
+    /// Inject an event programmatically (Legacy/Direct)
     pub fn inject_event(&mut self, event: UIEvent) {
         self.route_event(event);
     }

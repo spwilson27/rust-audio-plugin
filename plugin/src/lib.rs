@@ -7,8 +7,8 @@
 //! - Render - Vulkan graphics pipeline
 //! - Core - Audio processing and state management
 
-use std::panic;
 use std::ffi::c_void;
+use std::panic;
 
 // Module declarations for future phases
 pub mod pal {
@@ -27,9 +27,13 @@ pub mod core {
 }
 
 /// VST3 Factory Entry Point
-/// 
+///
 /// This is the main entry point called by the VST3 host to get the plugin factory.
 /// We wrap it in catch_unwind to prevent panics from crashing the host DAW.
+/// # Safety
+///
+/// This function is the entry point for the VST3 host. It must be called by a VST3-compatible host.
+/// The returned pointer must be a valid `IPluginFactory` interface.
 #[no_mangle]
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn GetPluginFactory() -> *mut c_void {
@@ -65,6 +69,9 @@ pub unsafe extern "system" fn DllMain(
 
 /// Bundle entry point (macOS)
 /// Called when the bundle is loaded on macOS
+/// # Safety
+///
+/// Called by the host when the bundle is loaded.
 #[cfg(target_os = "macos")]
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -74,6 +81,9 @@ pub unsafe extern "C" fn bundleEntry(_bundle: *mut c_void) -> bool {
 
 /// Bundle exit point (macOS)
 /// Called when the bundle is unloaded on macOS
+/// # Safety
+///
+/// Called by the host when the bundle is unloaded.
 #[cfg(target_os = "macos")]
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -101,7 +111,7 @@ mod tests {
         let result = panic::catch_unwind(|| {
             panic!("Test panic");
         });
-        
+
         assert!(result.is_err());
     }
 }

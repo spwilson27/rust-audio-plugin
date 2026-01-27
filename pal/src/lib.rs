@@ -22,13 +22,13 @@ mod event_router;
 pub use event_router::EventRouter;
 
 /// UI Event types for input handling
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)] // Added Clone, Copy, PartialEq for convenience
 pub enum UIEvent {
     MouseDown { x: f64, y: f64, button: u32 },
     MouseUp { x: f64, y: f64, button: u32 },
     MouseMove { x: f64, y: f64 },
-    KeyDown { keycode: u16 },
-    KeyUp { keycode: u16 },
+    KeyDown { keycode: u32 },
+    KeyUp { keycode: u32 },
 }
 
 /// Core trait for platform-specific window implementations

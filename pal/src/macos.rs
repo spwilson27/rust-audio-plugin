@@ -9,10 +9,9 @@
 //! - viewDidMoveToWindow for visibility detection
 //! - Coordinate system translation (Cocoa bottom-left → Vulkan top-left)
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use raw_window_handle::{AppKitWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
-use std::ptr::NonNull;
 
 use objc2::encode::{Encode, Encoding};
 // use objc2::msg_send_id;
@@ -143,6 +142,7 @@ extern "C" fn accepts_first_responder(_this: *mut AnyObject, _sel: Sel) -> objc2
 
 /// Helper to get EventRouter from associated object
 unsafe fn get_event_router(view: *mut AnyObject) -> Option<&'static mut crate::EventRouter> {
+    #[allow(deprecated)]
     use objc2::ffi::object_getInstanceVariable; // Correct import: GET
     use std::ffi::CString;
 
@@ -154,6 +154,7 @@ unsafe fn get_event_router(view: *mut AnyObject) -> Option<&'static mut crate::E
     let mut out_ptr: *const c_void = std::ptr::null();
 
     // Get the instance variable
+    #[allow(deprecated)]
     object_getInstanceVariable(
         view as *mut _ as *mut objc2::ffi::objc_object,
         key.as_ptr(),
@@ -281,7 +282,9 @@ extern "C" fn key_down(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
         let keycode: u16 = objc2::msg_send![event, keyCode];
 
         if let Some(router) = get_event_router(this) {
-            router.route_event(crate::UIEvent::KeyDown { keycode });
+            router.route_event(crate::UIEvent::KeyDown {
+                keycode: keycode.into(),
+            });
         }
     }
 }
@@ -296,7 +299,9 @@ extern "C" fn key_up(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
         let keycode: u16 = objc2::msg_send![event, keyCode];
 
         if let Some(router) = get_event_router(this) {
-            router.route_event(crate::UIEvent::KeyUp { keycode });
+            router.route_event(crate::UIEvent::KeyUp {
+                keycode: keycode.into(),
+            });
         }
     }
 }
@@ -314,6 +319,11 @@ pub struct MacOSWindow {
     // EventRouter lives here and pointer is stored in view's associated objects
     // Must be Boxed to ensure stable address when MacOSWindow moves
     event_router: Box<crate::EventRouter>,
+    // Optional: Keep reference to window if we created it (standalone mode)
+    // to prevent it from being deallocated?
+    // In standalone, we leak it or keep it here.
+    #[allow(dead_code)]
+    _owned_window: Option<Retained<AnyObject>>,
 }
 
 impl crate::NativeWindow for MacOSWindow {
@@ -323,9 +333,38 @@ impl crate::NativeWindow for MacOSWindow {
 
         // Cast parent to NSView
         let parent_view = parent as *mut AnyObject;
-        if parent_view.is_null() {
-            bail!("Parent view pointer is null");
-        }
+
+        // If parent is null, we are in Standalone mode and need to create a window
+        let (view_to_attach, _owned_window) = if parent_view.is_null() {
+            // Create a new NSWindow
+            let window_rect = NSRect {
+                origin: NSPoint { x: 100.0, y: 100.0 },
+                size: NSSize {
+                    width: 800.0,
+                    height: 600.0,
+                },
+            };
+            let style_mask: u64 = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3); // Titled | Closable | Miniaturizable | Resizable
+            let ns_window_class = AnyClass::get("NSWindow").expect("NSWindow class not found");
+            let window: Retained<AnyObject> = objc2::msg_send_id![
+                objc2::msg_send_id![ns_window_class, alloc],
+                initWithContentRect: window_rect
+                styleMask: style_mask
+                backing: 2u64 // NSBackingStoreBuffered
+                defer: false
+            ];
+
+            let title = objc2_foundation::NSString::from_str("splug - Standalone");
+            let _: () = objc2::msg_send![&*window, setTitle: &*title];
+            let _: () =
+                objc2::msg_send![&*window, makeKeyAndOrderFront: std::ptr::null::<AnyObject>()];
+
+            // Use the window's content view (it's created automatically usually, but let's check)
+            let content_view: *mut AnyObject = objc2::msg_send![&*window, contentView];
+            (content_view, Some(window))
+        } else {
+            (parent_view, None)
+        };
 
         // Create an instance of our custom RustPluginView class
         let view_class = get_rust_view_class();
@@ -333,7 +372,8 @@ impl crate::NativeWindow for MacOSWindow {
         // Allocate and init new view using new selector
         let view: Retained<AnyObject> = unsafe { objc2::msg_send_id![view_class, new] };
 
-        let parent_ref = &*parent_view;
+        // For resizing, we need to match the parent
+        let parent_ref = unsafe { &*view_to_attach };
         let bounds: NSRect = objc2::msg_send![parent_ref, bounds];
         let width = bounds.size.width as u32;
         let height = bounds.size.height as u32;
@@ -360,16 +400,18 @@ impl crate::NativeWindow for MacOSWindow {
         };
 
         // Create MacOSWindow with Boxed EventRouter for stable address
-        let mut window = MacOSWindow {
+        let window = MacOSWindow {
             view,
             width,
             height,
             scale_factor,
             event_router: Box::new(crate::EventRouter::new()),
+            _owned_window,
         };
 
         // Store EventRouter pointer in view's associated objects so event handlers can access it
         unsafe {
+            #[allow(deprecated)]
             use objc2::ffi::object_setInstanceVariable;
             use std::ffi::CString;
 
@@ -378,6 +420,7 @@ impl crate::NativeWindow for MacOSWindow {
             let router_ptr = &*window.event_router as *const crate::EventRouter as *mut c_void;
 
             let view_ptr = Retained::as_ptr(&window.view);
+            #[allow(deprecated)]
             object_setInstanceVariable(
                 view_ptr as *mut objc2::runtime::AnyObject as *mut objc2::ffi::objc_object,
                 key.as_ptr(),
@@ -389,10 +432,13 @@ impl crate::NativeWindow for MacOSWindow {
     }
 
     fn get_raw_handle(&self) -> RawWindowHandle {
-        let view_ptr = Retained::as_ptr(&self.view) as *mut c_void;
-        let ns_view = NonNull::new(view_ptr).expect("NSView pointer should never be null");
+        // AppKitWindowHandle::new expects a NonNull<c_void> to the NSView
+        // Deref Retained<AnyObject> to &AnyObject, then cast to pointer
+        // Retained::as_ptr is available and safer/cleaner
+        let ptr = Retained::as_ptr(&self.view) as *mut c_void;
+        let view_ptr = std::ptr::NonNull::new(ptr).expect("View pointer null");
 
-        let handle = AppKitWindowHandle::new(ns_view);
+        let handle = AppKitWindowHandle::new(view_ptr);
         RawWindowHandle::AppKit(handle)
     }
 
@@ -421,10 +467,14 @@ impl crate::NativeWindow for MacOSWindow {
     }
 
     fn is_visible(&self) -> bool {
-        // Check if view has a window (indicates it's in the view hierarchy)
+        // Check if view has a window AND that window is visible
         unsafe {
             let window_ptr: *mut AnyObject = objc2::msg_send![&*self.view, window];
-            !window_ptr.is_null()
+            if window_ptr.is_null() {
+                return false;
+            }
+            let is_visible: bool = objc2::msg_send![window_ptr, isVisible];
+            is_visible
         }
     }
 }
@@ -462,5 +512,10 @@ impl MacOSWindow {
     #[allow(dead_code)]
     fn trigger_event(&mut self, event: crate::UIEvent) {
         self.event_router.route_event(event);
+    }
+
+    /// Helper to access the EventRouter (for standalone RPC)
+    pub fn event_router_mut(&mut self) -> &mut crate::EventRouter {
+        &mut self.event_router
     }
 }

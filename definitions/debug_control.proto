@@ -1,0 +1,38 @@
+syntax = "proto3";
+package debug_control;
+
+service DebugControl {
+    rpc SendInputEvent (InputEventMsg) returns (Ack);
+}
+
+message InputEventMsg {
+    oneof event {
+        MouseMsg mouse = 1;
+        KeyMsg key = 2;
+    }
+}
+
+message MouseMsg {
+    enum Type {
+        DOWN = 0;
+        UP = 1;
+        MOVE = 2;
+    }
+    Type type = 1;
+    float x = 2;
+    float y = 3;
+    uint32 button = 4;
+}
+
+message KeyMsg {
+    enum Type {
+        DOWN = 0;
+        UP = 1;
+    }
+    Type type = 1;
+    uint32 keycode = 2;
+}
+
+message Ack {
+    bool success = 1;
+}

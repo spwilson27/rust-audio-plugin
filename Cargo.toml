@@ -1,12 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
+    "audio-core",
     "plugin",
     "standalone",
     "xtask",
-    "definitions",
     "pal",
     "gui",
+    "debug-server",
 ]
 
 [workspace.package]
