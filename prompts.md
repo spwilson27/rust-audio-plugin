@@ -311,24 +311,31 @@ fn migrate_state(state: PluginState) -> PluginState {
 
 ---
 
-### 6. Implementation Checklist
+###6. Implementation Checklist
 
 Use this as a high-level verification before moving to the next phase:
 
-- [ ] **Phase 1 Complete:**
-  - [ ] Workspace structure created (`plugin`, `standalone`, `xtask`, `definitions`)
-  - [ ] `cargo xtask bundle` produces valid VST3 bundle on macOS
-  - [ ] `cargo xtask bundle` produces valid VST3 on Windows
-  - [ ] macOS bundle is codesigned
-  - [ ] `standalone --headless` flag runs without window
+- [x] **Phase 1 Complete:**
+  - [x] Workspace structure created (`plugin`, `standalone`, `xtask`, `definitions`, `pal`, `gui`)
+  - [x] `cargo xtask bundle` produces valid VST3 bundle on macOS
+  - [ ] `cargo xtask bundle` produces valid VST3 on Windows (not yet tested)
+  - [x] macOS bundle is codesigned
+  - [x] `standalone --headless` flag runs without window
+  - [x] Build system working with zero warnings
 
-- [ ] **Phase 2 Complete:**
-  - [ ] PAL trait defined with all required methods (`attach`, `get_raw_handle`, `set_size`, `get_scale_factor`)
-  - [ ] macOS: `CVDisplayLink` running at 60 FPS
-  - [ ] Windows: `WM_TIMER` running at 60 FPS
-  - [ ] Mouse/keyboard events translated to `UIEvent` enum
-  - [ ] VST3 resize protocol implemented with Size Sentinel
-  - [ ] Test: Standalone shows 60 FPS counter and responds to clicks
+- [/] **Phase 2 Complete (In Progress):**
+  - [x] PAL trait defined with all required methods (`attach`, `get_raw_handle`, `set_size`, `get_scale_factor`, `is_visible`)
+  - [x] macOS: NSView creation and parenting working
+  - [x] macOS: Scale factor detection (Retina support)
+  - [x] macOS: Event callback API implemented
+  - [/] macOS: NSView subclass for event delivery (API ready, implementation deferred to Phase 2.3)
+  - [ ] macOS: `CVDisplayLink` running at 60 FPS (deferred to Phase 2.3/2.4)
+  - [ ] Windows: `WM_TIMER` running at 60 FPS (not started)
+  - [ ] Mouse/keyboard events translated to `UIEvent` enum (infrastructure ready, delivery pending NSView subclass)
+  - [ ] VST3 resize protocol implemented with Size Sentinel (deferred to Phase 2.4)
+  - [x] Standalone: Window opens with proper NSApplication setup
+  - [x] Standalone: Window closes cleanly and app terminates
+  - [ ] Test: Standalone shows 60 FPS counter and responds to clicks (window works, events/rendering pending)
 
 - [ ] **Phase 3 Complete:**
   - [ ] Vulkan context initializes on macOS (MoltenVK)

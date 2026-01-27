@@ -93,6 +93,23 @@ fn run_with_gui() -> Result<()> {
         let title = NSString::from_str("splug - Standalone");
         let _: () = objc2::msg_send![&*window, setTitle: &*title];
 
+        // Observe window close notification to terminate app
+        let notification_center_class =
+            AnyClass::get("NSNotificationCenter").expect("NSNotificationCenter not found");
+        let notification_center: Retained<AnyObject> =
+            msg_send_id![notification_center_class, defaultCenter];
+
+        let notification_name = NSString::from_str("NSWindowWillCloseNotification");
+        let selector = objc2::sel!(terminate:);
+
+        let _: () = objc2::msg_send![
+            &*notification_center,
+            addObserver: &*app
+            selector: selector
+            name: &*notification_name
+            object: &*window
+        ];
+
         // 3. Get content view and create GUI context
         let content_view: *mut AnyObject = objc2::msg_send![&*window, contentView];
 
