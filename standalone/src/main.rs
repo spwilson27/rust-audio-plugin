@@ -10,6 +10,29 @@ use clap::Parser;
 #[cfg(target_os = "macos")]
 #[cfg(target_os = "macos")]
 use pal::macos::MacOSWindow;
+
+// WindowHandleWrapper to implement raw_window_handle traits for &dyn NativeWindow
+struct WindowHandleWrapper<'a>(&'a dyn pal::NativeWindow);
+
+impl<'a> raw_window_handle::HasWindowHandle for WindowHandleWrapper<'a> {
+    fn window_handle(
+        &self,
+    ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
+        Ok(unsafe { raw_window_handle::WindowHandle::borrow_raw(self.0.get_raw_handle()) })
+    }
+}
+
+impl<'a> raw_window_handle::HasDisplayHandle for WindowHandleWrapper<'a> {
+    fn display_handle(
+        &self,
+    ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
+        use raw_window_handle::{AppKitDisplayHandle, DisplayHandle, RawDisplayHandle};
+        Ok(unsafe {
+            DisplayHandle::borrow_raw(RawDisplayHandle::AppKit(AppKitDisplayHandle::new()))
+        })
+    }
+}
+
 #[cfg(target_os = "macos")]
 #[derive(Parser, Debug)]
 #[command(name = "standalone")]
@@ -116,6 +139,15 @@ fn run_with_gui() -> Result<()> {
     #[cfg(not(target_os = "macos"))]
     let (app, mut window) = unimplemented!("Only macOS supported for now");
 
+    window.set_size(800, 600)?;
+
+    // 2.5. Initialize Vulkan renderer
+    println!("Initializing Vulkan renderer...");
+    let window_handle = WindowHandleWrapper(&*window);
+    let mut renderer = gui::Renderer::new(&window_handle, 800, 600)
+        .context("Failed to initialize Vulkan renderer")?;
+    println!("Vulkan initialized!");
+
     // 3. Setup RPC Server for testing
     // Create a channel for UI events
     let (tx, rx) = crossbeam_channel::unbounded();
@@ -134,8 +166,6 @@ fn run_with_gui() -> Result<()> {
             eprintln!("Failed to start RPC server: {}", e);
         }
     }
-
-    window.set_size(800, 600)?;
 
     // Flag to signal exit from callback
     use std::sync::{
@@ -170,6 +200,12 @@ fn run_with_gui() -> Result<()> {
 
         // Poll system events via PAL
         app.poll_events();
+
+        // Render frame
+        if let Err(e) = renderer.draw_frame() {
+            eprintln!("Render error: {}", e);
+            // Continue for now, might be OUT_OF_DATE
+        }
 
         // Exit if window is closed (not visible AND not minimized)
         if !window.closed() {

@@ -16,6 +16,7 @@ gui = { path = "../gui" }
 pal = { path = "../pal" }
 debug-server = { path = "../debug-server" }
 crossbeam-channel = "0.5"
+raw-window-handle.workspace = true
 
 # Platform-specific dependencies for standalone window creation
 [target.'cfg(target_os = "macos")'.dependencies]

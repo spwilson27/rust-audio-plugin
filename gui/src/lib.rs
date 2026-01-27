@@ -24,6 +24,10 @@
 
 use anyhow::Result;
 
+// Vulkan rendering backend
+mod vulkan;
+pub use vulkan::{Renderer, VulkanContext};
+
 /// UI Event types for input handling
 #[derive(Debug, Clone, Copy)]
 pub enum UIEvent {

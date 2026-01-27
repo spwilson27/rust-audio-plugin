@@ -11,6 +11,8 @@ name = "gui"
 [dependencies]
 anyhow.workspace = true
 raw-window-handle.workspace = true
+ash = "0.38"
+ash-window = "0.13"
 
 # GUI framework will use pal and render crates
 pal = { path = "../pal" }
