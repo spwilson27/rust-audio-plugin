@@ -120,6 +120,13 @@ fn get_rust_view_class() -> &'static AnyClass {
                     as extern "C" fn(*mut AnyObject, Sel) -> objc2::runtime::Bool,
             );
 
+            // Override acceptsFirstMouse to return YES so we receive mouse events when clicking an unfocused window
+            builder.add_method(
+                sel!(acceptsFirstMouse:),
+                accepts_first_mouse
+                    as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject) -> objc2::runtime::Bool,
+            );
+
             // Mouse event handlers
             builder.add_method(
                 sel!(mouseDown:),
@@ -169,6 +176,15 @@ fn get_rust_view_class() -> &'static AnyClass {
 
 /// Accept first responder to receive keyboard events
 extern "C" fn accepts_first_responder(_this: *mut AnyObject, _sel: Sel) -> objc2::runtime::Bool {
+    objc2::runtime::Bool::YES
+}
+
+/// Accept first mouse to receive mouse events when window is not key
+extern "C" fn accepts_first_mouse(
+    _this: *mut AnyObject,
+    _sel: Sel,
+    _event: *mut AnyObject,
+) -> objc2::runtime::Bool {
     objc2::runtime::Bool::YES
 }
 

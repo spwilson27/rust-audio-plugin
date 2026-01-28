@@ -657,4 +657,55 @@ mod tests {
             "Capture should be released on MouseUp"
         );
     }
+
+    #[test]
+    fn test_knob_single_click_drag() {
+        use crate::widgets::Knob;
+        let mut container = WidgetContainer::new();
+        // Knob at 10,10 size 30x30. Center approx 25,25.
+        // Sensitivity 1.0 (default?)
+        let knob = Knob::new(10.0, 10.0, 30.0);
+        container.add_widget(Box::new(knob));
+
+        // 1. Mouse Down on Knob (25, 25). Unfocused.
+        // This should set focus AND capture mouse.
+        let _ = container.handle_ui_event(UIEvent::MouseDown {
+            x: 25.0,
+            y: 25.0,
+            button: 0,
+        });
+
+        // Assert capture
+        assert_eq!(container.captured_index, Some(0));
+
+        // 2. Drag Up (Decrease y) by 10 pixels
+        // Knob sensitivity is usually pixels -> value.
+        // Let's drag a significant amount.
+        let results = container.handle_ui_event(UIEvent::MouseMove { x: 25.0, y: 15.0 });
+        let value_changed = results
+            .iter()
+            .any(|r| matches!(r, EventResult::ValueChanged(_)));
+        assert!(
+            value_changed,
+            "Should produce ValueChanged event on drag step 1"
+        );
+
+        // 3. More Drag
+        let results = container.handle_ui_event(UIEvent::MouseMove { x: 25.0, y: 5.0 });
+        let value_changed = results
+            .iter()
+            .any(|r| matches!(r, EventResult::ValueChanged(_)));
+        assert!(
+            value_changed,
+            "Should produce ValueChanged event on drag step 2"
+        );
+
+        // 4. Mouse Up
+        container.handle_ui_event(UIEvent::MouseUp {
+            x: 25.0,
+            y: 5.0,
+            button: 0,
+        });
+        assert_eq!(container.captured_index, None);
+    }
 }
