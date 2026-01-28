@@ -46,9 +46,6 @@ pub struct Renderer {
     current_fps: f32,
     fixed_fps: Option<f32>,
 
-    // Widget container (optional)
-    widget_container: Option<crate::widgets::container::WidgetContainer>,
-
     // Context must be last to be dropped last
     context: VulkanContext,
 }
@@ -161,7 +158,6 @@ impl Renderer {
             last_frame_time: None,
             current_fps: 0.0,
             fixed_fps: None,
-            widget_container: None,
         })
     }
 
@@ -237,16 +233,14 @@ impl Renderer {
         self.fixed_fps = fps;
     }
 
-    /// Set widget container for rendering
-    pub fn set_widgets(&mut self, container: crate::widgets::container::WidgetContainer) {
-        self.widget_container = Some(container);
-    }
-
     /// Draw a single frame.
     ///
     /// This acquires an image from the swapchain, records commands to clear it and draw contents,
     /// submits the commands to the GPU, and presents the image.
-    pub fn draw_frame(&mut self) -> Result<()> {
+    pub fn draw_frame(
+        &mut self,
+        widgets: Option<&crate::widgets::container::WidgetContainer>,
+    ) -> Result<()> {
         // Update frame timing
         self.update_frame_timing();
 
@@ -307,8 +301,8 @@ impl Renderer {
             let h = self.swapchain.extent().height as f32;
 
             // Render widgets if available, otherwise render test pattern
-            if let Some(ref widgets) = self.widget_container {
-                widgets.render(
+            if let Some(widgets_ref) = widgets {
+                widgets_ref.render(
                     &mut self.shape_renderer,
                     &mut self.text_renderer,
                     &self.context,

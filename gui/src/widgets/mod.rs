@@ -24,7 +24,13 @@ use super::vulkan::shape_renderer::ShapeRenderer;
 use super::vulkan::text_renderer::TextRenderer;
 
 /// Core trait for all UI widgets
-pub trait Widget: Send {
+pub trait Widget: std::any::Any + Send {
+    /// Get reference as Any for downcasting
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Get moving reference as Any for downcasting
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+
     /// Get the unique ID of this widget
     fn id(&self) -> WidgetId;
 

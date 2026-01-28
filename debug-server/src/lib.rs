@@ -77,6 +77,19 @@ pub struct DebugControlImpl {
     sender: Arc<Mutex<Sender<UIEvent>>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct GetWidgetStateRequest {
+    pub id: u64,
+    pub reply: crossbeam_channel::Sender<Option<debug_control::WidgetState>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetWidgetValueRequest {
+    pub id: u64,
+    pub value: f64,
+    pub reply: crossbeam_channel::Sender<bool>,
+}
+
 #[tonic::async_trait]
 impl DebugControl for DebugControlImpl {
     async fn send_input_event(
@@ -157,30 +170,66 @@ impl DebugControl for DebugControlImpl {
         &self,
         request: Request<debug_control::WidgetIdMsg>,
     ) -> Result<Response<debug_control::WidgetState>, Status> {
-        // TODO: Implement widget state query
-        // This requires GuiContext integration to access the WidgetContainer
         let widget_id = request.into_inner().widget_id;
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
 
-        // Placeholder: Return unimplemented error
-        Err(Status::unimplemented(format!(
-            "GetWidgetState not yet implemented for widget {}",
-            widget_id
-        )))
+        let req = GetWidgetStateRequest {
+            id: widget_id,
+            reply: reply_tx,
+        };
+
+        {
+            let guard = self
+                .sender
+                .lock()
+                .map_err(|_| Status::internal("Failed to lock sender"))?;
+
+            guard
+                .send(UIEvent::Custom(std::sync::Arc::new(req)))
+                .map_err(|_| Status::internal("Failed to send state request"))?;
+        }
+
+        // Wait for response
+        let state = reply_rx.recv().map_err(|_| {
+            Status::internal("Failed to receive state response (main thread crashed?)")
+        })?;
+
+        match state {
+            Some(s) => Ok(Response::new(s)),
+            None => Err(Status::not_found(format!("Widget {} not found", widget_id))),
+        }
     }
 
     async fn set_widget_value(
         &self,
         request: Request<debug_control::SetWidgetValueMsg>,
     ) -> Result<Response<debug_control::Ack>, Status> {
-        // TODO: Implement widget value setting
-        // This requires GuiContext integration to access the WidgetContainer
         let msg = request.into_inner();
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
 
-        // Placeholder: Return unimplemented error
-        Err(Status::unimplemented(format!(
-            "SetWidgetValue not yet implemented for widget {} (value: {})",
-            msg.widget_id, msg.value
-        )))
+        let req = SetWidgetValueRequest {
+            id: msg.widget_id,
+            value: msg.value,
+            reply: reply_tx,
+        };
+
+        {
+            let guard = self
+                .sender
+                .lock()
+                .map_err(|_| Status::internal("Failed to lock sender"))?;
+
+            guard
+                .send(UIEvent::Custom(std::sync::Arc::new(req)))
+                .map_err(|_| Status::internal("Failed to send set value request"))?;
+        }
+
+        // Wait for response
+        let success = reply_rx.recv().map_err(|_| {
+            Status::internal("Failed to receive set value response (main thread crashed?)")
+        })?;
+
+        Ok(Response::new(debug_control::Ack { success }))
     }
 
     async fn list_widgets(

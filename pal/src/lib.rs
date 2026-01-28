@@ -56,6 +56,8 @@ pub enum UIEvent {
     /// Capture screen request (reply channel)
     /// Reply: (pixels, width, height)
     CaptureScreen(crossbeam_channel::Sender<(Vec<u8>, u32, u32)>),
+    /// Custom event for application-specific communication (e.g., debug messages)
+    Custom(std::sync::Arc<dyn std::any::Any + Send + Sync>),
 }
 
 /// Core trait for platform-specific window implementations

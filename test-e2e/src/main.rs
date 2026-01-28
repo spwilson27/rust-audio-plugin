@@ -99,11 +99,10 @@ fn run_widget_showcase(args: &Args) -> Result<()> {
     }
 
     // Setup widgets for showcase
-    let widgets = setup_widget_showcase();
+    let mut widgets = setup_widget_showcase();
     let widget_count = widgets.len();
 
     // Connect widgets to renderer
-    renderer.set_widgets(widgets);
     tracing::info!("Created {} widgets for showcase", widget_count);
 
     // Setup RPC Server
@@ -138,7 +137,7 @@ fn run_widget_showcase(args: &Args) -> Result<()> {
 
         // Process events
         while let Ok(event) = app_rx.try_recv() {
-            match event {
+            match &event {
                 UIEvent::Quit => {
                     tracing::info!("Received Quit, exiting...");
                     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -157,12 +156,48 @@ fn run_widget_showcase(args: &Args) -> Result<()> {
                         }
                     }
                 }
-                _ => {}
+                UIEvent::Custom(data) => {
+                    // Handle GetWidgetStateRequest
+                    if let Some(req) = data.downcast_ref::<debug_server::GetWidgetStateRequest>() {
+                        // Use index as ID
+                        let index = req.id as usize;
+                        let state = if let Some(widget) = widgets.get_widget_at(index) {
+                            extract_widget_state(widget, req.id)
+                        } else {
+                            None
+                        };
+                        let _ = req.reply.send(state);
+                    }
+                    // Handle SetWidgetValueRequest
+                    else if let Some(req) =
+                        data.downcast_ref::<debug_server::SetWidgetValueRequest>()
+                    {
+                        let index = req.id as usize;
+                        let success = if let Some(widget) = widgets.get_widget_at_mut(index) {
+                            if let Some(slider) = widget.as_any_mut().downcast_mut::<Slider>() {
+                                slider.set_value(req.value);
+                                true
+                            } else if let Some(knob) = widget.as_any_mut().downcast_mut::<Knob>() {
+                                knob.set_value(req.value);
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        };
+                        let _ = req.reply.send(success);
+                    }
+                }
+                // Forward all other events to widgets
+                _ => {
+                    widgets.handle_ui_event(event.clone());
+                }
             }
         }
 
         // Render
-        if let Err(e) = renderer.draw_frame() {
+        if let Err(e) = renderer.draw_frame(Some(&widgets)) {
             tracing::warn!("Render error: {}", e);
         }
 
@@ -231,4 +266,64 @@ fn run_text_resize(_args: &Args) -> Result<()> {
     tracing::info!("Text resize mode not yet implemented");
     // TODO: Implement text resize demo
     Ok(())
+}
+
+/// Helper to extract state from a widget for RPC
+fn extract_widget_state(
+    widget: &Box<dyn Widget>,
+    id: u64,
+) -> Option<debug_server::debug_control::WidgetState> {
+    use debug_server::debug_control::{
+        widget_state, ButtonState, KnobState, SliderState, TextboxState,
+    };
+
+    let bounds = widget.bounds();
+    let rect = debug_server::debug_control::Rect {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+    };
+
+    let mut state = debug_server::debug_control::WidgetState {
+        widget_id: id,
+        widget_type: "Unknown".to_string(),
+        focused: widget.is_focused(),
+        enabled: true,
+        bounds: Some(rect),
+        specific_state: None,
+    };
+
+    if let Some(_btn) = widget.as_any().downcast_ref::<Button>() {
+        state.widget_type = "Button".to_string();
+        state.specific_state = Some(widget_state::SpecificState::Button(ButtonState {
+            label: "Button".to_string(), // Placeholder
+            state: "Normal".to_string(), // Placeholder
+        }));
+    } else if let Some(slider) = widget.as_any().downcast_ref::<Slider>() {
+        state.widget_type = "Slider".to_string();
+        state.specific_state = Some(widget_state::SpecificState::Slider(SliderState {
+            value: slider.value(),
+            orientation: format!("{:?}", slider.orientation()),
+            dragging: false,
+        }));
+    } else if let Some(knob) = widget.as_any().downcast_ref::<Knob>() {
+        state.widget_type = "Knob".to_string();
+        state.specific_state = Some(widget_state::SpecificState::Knob(KnobState {
+            value: knob.value(),
+            min_angle: -150.0,
+            max_angle: 150.0,
+            dragging: false,
+        }));
+    } else if let Some(textbox) = widget.as_any().downcast_ref::<Textbox>() {
+        state.widget_type = "Textbox".to_string();
+        state.specific_state = Some(widget_state::SpecificState::Textbox(TextboxState {
+            text: textbox.text().to_string(),
+            cursor_pos: 0,
+            has_selection: false,
+            placeholder: "".to_string(),
+        }));
+    }
+
+    Some(state)
 }
