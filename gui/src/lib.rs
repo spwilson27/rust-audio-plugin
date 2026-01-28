@@ -25,6 +25,7 @@
 use anyhow::Result;
 
 // Vulkan rendering backend
+pub mod fonts;
 mod vulkan;
 pub use vulkan::{Renderer, VulkanContext};
 

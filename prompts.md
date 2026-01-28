@@ -376,47 +376,54 @@ Use this as a high-level verification before moving to the next phase:
 This updated prompt document now captures all critical architectural details from `architecture_v2.md`, ensuring agents have complete context for robust implementation.
 ---
 
-## Current Status (Updated 2026-01-26)
+## Current Status (Updated 2026-01-27)
 
-### ✅ Phase 3.1: Vulkan Initialization - COMPLETE
+### ✅ Phase 3.3: Shape Rendering & Golden Tests - COMPLETE
 
 **Completed Work:**
-- Vulkan context, device, and surface creation (`gui/src/vulkan/context.rs`)
-- Swapchain management with format selection (`gui/src/vulkan/swapchain.rs`)  
-- Basic clear-color renderer (`gui/src/vulkan/renderer.rs`)
-- Integration with standalone app via native window handles
-- **All Vulkan validation errors fixed:**
-  - Added `VK_IMAGE_USAGE_TRANSFER_DST_BIT` to swapchain
-  - Per-image semaphore synchronization
-  - macOS instance extension dependencies
-- Automated E2E test: `standalone/tests/vulkan_validation.rs`
+- **Shape Rendering:**
+  - Implemented `ShapeRenderer` with SDF-based shaders for resolution-independent circles, rounded rects, and borders.
+  - Integration with `Renderer` and command buffer recording.
+- **Golden Tests (Visual Regression):**
+  - Implemented `capture_frame` for consistent screenshot capture from Vulkan swapchain.
+  - Added `--test-screenshot` and `--golden-image` flags to `standalone` binary.
+  - Created `cargo xtask goldens` for generating golden images.
+  - Created `cargo test -p standalone --test golden_e2e` for verification.
+- **Performance & Debugging:**
+  - `CVDisplayLink` driving 60 FPS rendering on macOS.
+  - Visual FPS overlay with performance tracking.
+  - Window focus detection to throttle rendering when backgrounded.
+  - Comprehensive logging system.
 
 ---
 
 ## Proposed Next Steps
 
-### Option A: Phase 3.2 - CVDisplayLink (60 FPS Render Loop)
-**Priority: HIGH** - Foundation for smooth rendering
-
+### Option A: Phase 3.4 - Text Rendering (Font Atlas)
+**Priority: HIGH** - Essential for any useful UI
 **Tasks:**
-1. Implement `CVDisplayLink` in `pal/src/macos.rs`
-2. Wire vsync events through event router
-3. Call `renderer.draw_frame()` at display refresh rate
-4. Add frame timing verification
-
-**Benefit:** Proper time-driven rendering at 60 FPS  
-**Complexity:** Medium (2-3 hours)
-
----
-
-### Option B: Phase 3.3 - Shape Rendering Pipeline
-**Priority: MEDIUM** - Validates full graphics pipeline
-
-**Tasks:**
-1. Create render passes and framebuffers
-2. Write vertex/fragment shaders (triangle/quad)
-3. Build graphics pipeline
-4. Render test geometry
-
-**Benefit:** Full Vulkan pipeline validation  
+1. Integrate `fontdue` or similar for glyph rasterization.
+2. Implement texture atlas management.
+3. Create `TextRenderer` pipeline (similar to `ShapeRenderer` but for textured quads).
+4. Implement basic labeling and value display.
+**Benefit:** Enables labeled controls (knobs, sliders).
 **Complexity:** Medium-High (4-6 hours)
+
+### Option B: Phase 3.5 - UI Widget Framework
+**Priority: MEDIUM** - Needs text rendering first
+**Tasks:**
+1. Define `Widget` trait (`on_event`, `draw`).
+2. Implement basic widgets: `Button`, `Slider`, `Knob`.
+3. Implement `Layout` system (flexbox-lite or absolute positioning).
+4. Connect `UIEvent` routing to widgets.
+**Benefit:** Interactive plugin UI.
+**Complexity:** High (6-8 hours)
+
+### Option C: Phase 4.1 - Audio Engine & Parameter Connection
+**Priority: MEDIUM** - Can be done in parallel with UI
+**Tasks:**
+1. Implement `PluginProcessor` with `rtrb` parameter queues.
+2. Implement `AtomicFloat` parameter storage.
+3. Verify wait-free property with tests.
+**Benefit:** Functional audio processing.
+**Complexity:** Medium (4-5 hours)

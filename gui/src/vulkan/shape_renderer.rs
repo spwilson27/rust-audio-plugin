@@ -198,7 +198,7 @@ impl ShapeRenderer {
         let max_vertex_count = 10000;
         let buffer_size = (mem::size_of::<ShapeVertex>() * max_vertex_count) as u64;
 
-        let (vertex_buffer, vertex_memory) = create_buffer(
+        let (vertex_buffer, vertex_memory) = super::buffer::create_buffer(
             context,
             buffer_size,
             vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -382,7 +382,7 @@ impl Drop for ShapeRenderer {
     }
 }
 
-fn create_shader_module(device: &ash::Device, code: &[u8]) -> Result<vk::ShaderModule> {
+pub fn create_shader_module(device: &ash::Device, code: &[u8]) -> Result<vk::ShaderModule> {
     let shader_module_create_info = vk::ShaderModuleCreateInfo {
         code_size: code.len(),
         p_code: code.as_ptr() as *const u32,
@@ -390,57 +390,4 @@ fn create_shader_module(device: &ash::Device, code: &[u8]) -> Result<vk::ShaderM
     };
 
     unsafe { Ok(device.create_shader_module(&shader_module_create_info, None)?) }
-}
-
-fn create_buffer(
-    context: &VulkanContext,
-    size: vk::DeviceSize,
-    usage: vk::BufferUsageFlags,
-    properties: vk::MemoryPropertyFlags,
-) -> Result<(vk::Buffer, vk::DeviceMemory)> {
-    let device = context.device();
-
-    let buffer_info = vk::BufferCreateInfo::default()
-        .size(size)
-        .usage(usage)
-        .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-    let buffer = unsafe { device.create_buffer(&buffer_info, None)? };
-
-    let mem_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
-    let memory_type = find_memory_type(context, mem_requirements.memory_type_bits, properties)?;
-
-    let alloc_info = vk::MemoryAllocateInfo::default()
-        .allocation_size(mem_requirements.size)
-        .memory_type_index(memory_type);
-
-    let buffer_memory = unsafe { device.allocate_memory(&alloc_info, None)? };
-
-    unsafe {
-        device.bind_buffer_memory(buffer, buffer_memory, 0)?;
-    }
-
-    Ok((buffer, buffer_memory))
-}
-
-fn find_memory_type(
-    context: &VulkanContext,
-    type_filter: u32,
-    properties: vk::MemoryPropertyFlags,
-) -> Result<u32> {
-    let mem_properties = unsafe {
-        context
-            .instance()
-            .get_physical_device_memory_properties(context.physical_device())
-    };
-
-    for i in 0..mem_properties.memory_type_count {
-        if (type_filter & (1 << i)) != 0
-            && (mem_properties.memory_types[i as usize].property_flags & properties) == properties
-        {
-            return Ok(i);
-        }
-    }
-
-    anyhow::bail!("Failed to find suitable memory type")
 }

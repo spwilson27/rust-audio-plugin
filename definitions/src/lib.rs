@@ -14,5 +14,5 @@ pub mod plugin_state {
 
 pub mod debug_control {
     //! RPC debug control interface
-    //! TODO: Phase 5 - Add debug_control.proto
+    include!(concat!(env!("OUT_DIR"), "/debug_control.rs"));
 }

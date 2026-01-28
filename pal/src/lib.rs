@@ -24,7 +24,7 @@ mod event_router;
 pub use event_router::EventRouter;
 
 /// UI Event types for input handling
-#[derive(Debug, Clone, Copy, PartialEq)] // Added Clone, Copy, PartialEq for convenience
+#[derive(Debug, Clone)] // Removed Copy and PartialEq due to Sender
 pub enum UIEvent {
     MouseDown {
         x: f64,
@@ -51,6 +51,11 @@ pub enum UIEvent {
     RenderFrame,
     /// Window focus changed (true = gained focus, false = lost focus)
     FocusChanged(bool),
+    /// Resize window request (width, height)
+    Resize(u32, u32),
+    /// Capture screen request (reply channel)
+    /// Reply: (pixels, width, height)
+    CaptureScreen(crossbeam_channel::Sender<(Vec<u8>, u32, u32)>),
 }
 
 /// Core trait for platform-specific window implementations

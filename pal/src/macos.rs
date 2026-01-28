@@ -510,8 +510,26 @@ impl crate::NativeWindow for MacOSWindow {
         self.width = width;
         self.height = height;
 
-        // Update NSView frame using objc2 messaging
         unsafe {
+            // Calculate new frame size
+            // For NSWindow (standalone), we need to account for title bar potentially?
+            // Usually valid to just set content size.
+
+            if let Some(ref window) = self._owned_window {
+                // Standalone: Resize the WINDOW
+                let new_size = NSSize {
+                    width: width as f64,
+                    height: height as f64,
+                };
+                let _: () = objc2::msg_send![&*window, setContentSize: new_size];
+
+                // The view should autoresize if configured, or we assume it matches content view.
+                // But our view is a subview of content view?
+                // In attach: `objc2::msg_send![parent_ref, addSubview: &*view];` where parent_ref is window.contentView.
+                // We should also resize the view to match.
+            }
+
+            // Resize the view (always)
             let current_frame: NSRect = objc2::msg_send![&*self.view, frame];
             let new_frame = NSRect {
                 origin: current_frame.origin,
@@ -535,7 +553,7 @@ impl crate::NativeWindow for MacOSWindow {
             // Check if view has a window
             let window_ptr: *mut AnyObject = objc2::msg_send![&*self.view, window];
             if window_ptr.is_null() {
-                return false;
+                return true;
             }
 
             // Window exists if it's visible OR minimized
@@ -543,7 +561,7 @@ impl crate::NativeWindow for MacOSWindow {
             let is_visible: bool = objc2::msg_send![window_ptr, isVisible];
             let is_minimized: bool = objc2::msg_send![window_ptr, isMiniaturized];
 
-            is_visible || is_minimized
+            !(is_visible || is_minimized)
         }
     }
 

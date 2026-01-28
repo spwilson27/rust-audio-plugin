@@ -48,6 +48,10 @@ struct Args {
     /// Path to golden image for verification
     #[arg(long)]
     golden_image: Option<std::path::PathBuf>,
+
+    /// Force fixed FPS (60.0) for deterministic testing
+    #[arg(long)]
+    fixed_fps: bool,
 }
 
 fn verify_golden(current_img: &image::RgbaImage, golden_path: &std::path::Path) -> Result<()> {
@@ -207,6 +211,12 @@ fn run_with_gui(args: &Args) -> Result<()> {
     let window_handle = WindowHandleWrapper(&*window);
     let mut renderer = gui::Renderer::new(&window_handle, 800, 600)
         .context("Failed to initialize Vulkan renderer")?;
+
+    // Enable fixed FPS for screenshot tests to ensure deterministic output (golden tests)
+    if args.test_screenshot || args.fixed_fps {
+        renderer.set_fixed_fps(Some(60.0));
+    }
+
     tracing::info!("Vulkan initialized!");
 
     // 3. Setup RPC Server for testing
@@ -234,24 +244,20 @@ fn run_with_gui(args: &Args) -> Result<()> {
         Arc,
     };
     let should_quit = Arc::new(AtomicBool::new(false));
-    let should_quit_cb = should_quit.clone();
 
     // Track window focus state
     let window_focused = Arc::new(AtomicBool::new(true)); // Start focused
-    let window_focused_cb = window_focused.clone();
+
+    // Create a channel to buffer events so we can process them in the main loop
+    // where we have mutable access to window and renderer
+    let (app_tx, app_rx) = std::sync::mpsc::channel();
+    let app_tx_cb = app_tx.clone();
 
     // Call set_callback on the EventRouter directly
-    window
-        .event_router()
-        .set_callback(move |event| match event {
-            UIEvent::Quit => {
-                should_quit_cb.store(true, Ordering::Relaxed);
-            }
-            UIEvent::FocusChanged(focused) => {
-                window_focused_cb.store(focused, Ordering::Relaxed);
-            }
-            _ => {}
-        });
+    window.event_router().set_callback(move |event| {
+        // Forward all events to the main loop channel
+        let _ = app_tx_cb.send(event);
+    });
 
     tracing::info!("Window opened");
 
@@ -260,19 +266,48 @@ fn run_with_gui(args: &Args) -> Result<()> {
     let mut frame_count = 0;
 
     loop {
-        // Poll for RPC events
+        // Poll for RPC events (routes to callback -> app_tx)
         window.event_router().poll_events();
 
-        // Check for quit signal from RPC
-        if should_quit.load(Ordering::Relaxed) {
-            tracing::info!("Received Quit signal, exiting...");
-            // Wait a bit to allow RPC response to flush
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            break;
-        }
-
-        // Poll system events via PAL
+        // Poll system events via PAL (routes to callback -> app_tx)
         app.poll_events();
+
+        // Process buffered events
+        while let Ok(event) = app_rx.try_recv() {
+            match event {
+                UIEvent::Quit => {
+                    should_quit.store(true, Ordering::Relaxed);
+                    tracing::info!("Received Quit signal, exiting...");
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    return Ok(());
+                }
+                UIEvent::FocusChanged(focused) => {
+                    window_focused.store(focused, Ordering::Relaxed);
+                }
+                UIEvent::Resize(w, h) => {
+                    tracing::info!("Handling Resize event: {}x{}", w, h);
+                    if let Err(e) = window.set_size(w, h) {
+                        tracing::error!("Failed to resize window: {}", e);
+                    }
+                }
+                UIEvent::CaptureScreen(reply_tx) => {
+                    tracing::info!("Handling CaptureScreen request...");
+                    // Force a draw first? Maybe not, capturing current state.
+                    match renderer.capture_frame() {
+                        Ok(img) => {
+                            let (width, height) = img.dimensions();
+                            let data = img.into_raw();
+                            let _ = reply_tx.send((data, width, height));
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to capture frame: {}", e);
+                            // Send empty response or just drop channel (RPC will error)
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
 
         // Render frame - CVDisplayLink triggers events but we render from main thread
         if let Err(e) = renderer.draw_frame() {

@@ -14,6 +14,9 @@ raw-window-handle.workspace = true
 ash = "0.38"
 ash-window = "0.13"
 
+fontdue = "0.7"
+guillotiere = "0.6"
+
 # GUI framework will use pal and render crates
 pal = { path = "../pal" }
 # render = { path = "../render" } # Phase 3

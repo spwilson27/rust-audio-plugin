@@ -11,7 +11,9 @@ pub mod debug_control {
 
 pub use debug_control::debug_control_client::DebugControlClient;
 pub use debug_control::debug_control_server::{DebugControl, DebugControlServer};
-pub use debug_control::{Ack, InputEventMsg, KeyMsg, MouseMsg, QuitMsg};
+pub use debug_control::{
+    Ack, Empty, ImageBytes, InputEventMsg, KeyMsg, MouseMsg, QuitMsg, ResizeMsg,
+};
 
 use pal::UIEvent;
 
@@ -53,7 +55,11 @@ impl RpcServer {
 
             rt.block_on(async {
                 Server::builder()
-                    .add_service(DebugControlServer::new(service))
+                    .add_service(
+                        DebugControlServer::new(service)
+                            .max_decoding_message_size(16 * 1024 * 1024)
+                            .max_encoding_message_size(16 * 1024 * 1024),
+                    )
                     .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(
                         tokio::net::TcpListener::from_std(listener)
                             .expect("Failed to convert listener"),
@@ -97,6 +103,54 @@ impl DebugControl for DebugControlImpl {
                 "Failed to send event to input queue (channel closed)",
             )),
         }
+    }
+
+    async fn resize_window(
+        &self,
+        request: Request<debug_control::ResizeMsg>,
+    ) -> Result<Response<Ack>, Status> {
+        let msg = request.into_inner();
+        let event = UIEvent::Resize(msg.width, msg.height);
+
+        let guard = self
+            .sender
+            .lock()
+            .map_err(|_| Status::internal("Failed to lock sender"))?;
+
+        match guard.send(event) {
+            Ok(_) => Ok(Response::new(Ack { success: true })),
+            Err(_) => Err(Status::internal("Failed to send resize event")),
+        }
+    }
+
+    async fn capture_screen(
+        &self,
+        _request: Request<debug_control::Empty>,
+    ) -> Result<Response<debug_control::ImageBytes>, Status> {
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
+        let event = UIEvent::CaptureScreen(reply_tx);
+
+        {
+            let guard = self
+                .sender
+                .lock()
+                .map_err(|_| Status::internal("Failed to lock sender"))?;
+
+            guard
+                .send(event)
+                .map_err(|_| Status::internal("Failed to send capture event"))?;
+        }
+
+        // Wait for response (blocking, but acceptable for debug server)
+        let (data, width, height) = reply_rx.recv().map_err(|_| {
+            Status::internal("Failed to receive capture response (main thread crashed?)")
+        })?;
+
+        Ok(Response::new(debug_control::ImageBytes {
+            data,
+            width,
+            height,
+        }))
     }
 }
 

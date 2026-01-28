@@ -24,11 +24,14 @@ pub struct Renderer {
     render_pass: vk::RenderPass,
     framebuffers: Vec<vk::Framebuffer>,
     shape_renderer: ShapeRenderer,
+    text_renderer: super::text_renderer::TextRenderer,
+    font_atlas: super::text_renderer::FontAtlas,
 
     // Frame timing
     frame_times: Vec<f32>, // Last N frame times in milliseconds
     last_frame_time: Option<Instant>,
     current_fps: f32,
+    fixed_fps: Option<f32>,
 
     // Context must be last to be dropped last
     context: VulkanContext,
@@ -109,6 +112,12 @@ impl Renderer {
         // Create Shape Renderer
         let shape_renderer = ShapeRenderer::new(&context, render_pass)?;
 
+        // Create Font Atlas and Text Renderer
+        let font_atlas =
+            super::text_renderer::FontAtlas::new(&context, command_pool, context.graphics_queue())?;
+        let text_renderer =
+            super::text_renderer::TextRenderer::new(&context, render_pass, &font_atlas)?;
+
         Ok(Self {
             context,
             swapchain,
@@ -123,9 +132,12 @@ impl Renderer {
             render_pass,
             framebuffers,
             shape_renderer,
+            text_renderer,
+            font_atlas,
             frame_times: Vec::with_capacity(60),
             last_frame_time: None,
             current_fps: 0.0,
+            fixed_fps: None,
         })
     }
 
@@ -194,6 +206,11 @@ impl Renderer {
     /// Set the clear color
     pub fn set_clear_color(&mut self, r: f32, g: f32, b: f32, a: f32) {
         self.clear_color = [r, g, b, a];
+    }
+
+    /// Set a fixed FPS value for testing (deterministic output)
+    pub fn set_fixed_fps(&mut self, fps: Option<f32>) {
+        self.fixed_fps = fps;
     }
 
     /// Draw a single frame
@@ -292,6 +309,30 @@ impl Renderer {
             self.shape_renderer
                 .record_commands(command_buffer, w as u32, h as u32);
 
+            // Shape Rendering End (if explicit end needed? no)
+
+            // Text Rendering
+            self.text_renderer.begin();
+
+            // Draw FPS Text
+            let fps_text = format!(
+                "FPS: {:.1} ({:.2}ms)",
+                self.current_fps,
+                self.get_avg_frame_time()
+            );
+            self.text_renderer.draw_text(
+                &self.context,
+                &mut self.font_atlas,
+                &fps_text,
+                10.0,
+                h - 60.0,
+                20.0,
+                [1.0, 1.0, 1.0, 1.0],
+            )?;
+
+            self.text_renderer
+                .record_commands(command_buffer, w as u32, h as u32);
+
             device.cmd_end_render_pass(command_buffer);
 
             device.end_command_buffer(command_buffer)?;
@@ -342,6 +383,11 @@ impl Renderer {
 
     /// Update frame timing and calculate FPS
     fn update_frame_timing(&mut self) {
+        if let Some(fixed) = self.fixed_fps {
+            self.current_fps = fixed;
+            return;
+        }
+
         let now = Instant::now();
 
         if let Some(last) = self.last_frame_time {

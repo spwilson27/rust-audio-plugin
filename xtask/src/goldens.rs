@@ -34,6 +34,22 @@ pub fn generate() -> Result<()> {
 
     // Cleanup
     let _ = std::fs::remove_file(screenshot_path);
+
+    // Also generate resize test golden
+    println!("Running text_resize_e2e test to generate golden...");
+    let status = Command::new("cargo")
+        .current_dir(&root)
+        // Set env var to tell test to update golden
+        .env("UPDATE_GOLDENS", "1")
+        .args(&["test", "--test", "text_resize_e2e", "--", "--nocapture"])
+        .status()
+        .context("Failed to run text_resize_e2e test")?;
+
+    if !status.success() {
+        anyhow::bail!("text_resize_e2e generation failed");
+    }
+
+    println!("All goldens generated successfully.");
     Ok(())
 }
 

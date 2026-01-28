@@ -3,6 +3,8 @@ package debug_control;
 
 service DebugControl {
     rpc SendInputEvent (InputEventMsg) returns (Ack);
+    rpc ResizeWindow (ResizeMsg) returns (Ack);
+    rpc CaptureScreen (Empty) returns (ImageBytes);
 }
 
 message InputEventMsg {
@@ -34,6 +36,19 @@ message KeyMsg {
     }
     Type type = 1;
     uint32 keycode = 2;
+}
+
+message ResizeMsg {
+    uint32 width = 1;
+    uint32 height = 2;
+}
+
+message Empty {}
+
+message ImageBytes {
+    bytes data = 1;
+    uint32 width = 2;
+    uint32 height = 3;
 }
 
 message Ack {
