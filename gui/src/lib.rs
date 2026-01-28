@@ -30,6 +30,10 @@ mod vulkan;
 
 // Widget framework
 pub mod widgets;
+
+// Clipboard support
+pub mod clipboard;
+
 pub use vulkan::{Renderer, VulkanContext};
 
 /// UI Event types for input handling

@@ -20,6 +20,7 @@ guillotiere = "0.6"
 # GUI framework will use pal and render crates
 pal = { path = "../pal" }
 # render = { path = "../render" } # Phase 3
+arboard = "3.4" # Cross-platform clipboard support
 tracing.workspace = true
 image.workspace = true
 [dev-dependencies]

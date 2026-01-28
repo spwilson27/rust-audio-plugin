@@ -8,12 +8,16 @@
 //! - Automated testing via RPC event
 pub mod button;
 pub mod container;
+pub mod knob;
 pub mod layout;
 pub mod slider;
+pub mod textbox;
 pub mod widget_id;
 
 pub use button::Button;
+pub use knob::Knob;
 pub use slider::Slider;
+pub use textbox::Textbox;
 pub use widget_id::WidgetId;
 
 use super::vulkan::shape_renderer::ShapeRenderer;
