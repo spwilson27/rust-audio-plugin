@@ -310,7 +310,7 @@ fn run_with_gui(args: &Args) -> Result<()> {
         }
 
         // Render frame - CVDisplayLink triggers events but we render from main thread
-        if let Err(e) = renderer.draw_frame() {
+        if let Err(e) = renderer.draw_frame(None) {
             tracing::warn!("Render error: {}", e);
         }
 

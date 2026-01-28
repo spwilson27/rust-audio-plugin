@@ -46,6 +46,10 @@ pub struct Renderer {
     current_fps: f32,
     fixed_fps: Option<f32>,
 
+    /// Logical size of the UI (points/logical pixels)
+    logical_width: f32,
+    logical_height: f32,
+
     // Context must be last to be dropped last
     context: VulkanContext,
 }
@@ -158,6 +162,8 @@ impl Renderer {
             last_frame_time: None,
             current_fps: 0.0,
             fixed_fps: None,
+            logical_width: width as f32,
+            logical_height: height as f32,
         })
     }
 
@@ -363,10 +369,20 @@ impl Renderer {
             )?;
 
             // Record all rendering commands
-            self.shape_renderer
-                .record_commands(command_buffer, w as u32, h as u32);
-            self.text_renderer
-                .record_commands(command_buffer, w as u32, h as u32);
+            self.shape_renderer.record_commands(
+                command_buffer,
+                self.swapchain.extent().width,
+                self.swapchain.extent().height,
+                self.logical_width,
+                self.logical_height,
+            );
+            self.text_renderer.record_commands(
+                command_buffer,
+                self.swapchain.extent().width,
+                self.swapchain.extent().height,
+                self.logical_width,
+                self.logical_height,
+            );
 
             device.cmd_end_render_pass(command_buffer);
 

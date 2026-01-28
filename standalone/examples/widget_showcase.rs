@@ -2,172 +2,155 @@
 //!
 //! Demonstrates all 4 widgets with interactive controls and text rendering.
 
-use anyhow::Result;
-use gui::widgets::{Button, Knob, Slider, Textbox, WidgetContainer};
-use gui::{GuiContext, VulkanContext};
-use pal::{App, Event, Window};
-use std::sync::Arc;
-use tracing::{debug, info};
+use anyhow::{Context, Result};
+use gui::widgets::container::WidgetContainer;
+use gui::widgets::{Button, Knob, Slider, Textbox};
+use pal::{App, MacOSApp, MacOSWindow, NativeWindow, UIEvent as PalEvent};
+use tracing::info;
+
+struct WindowHandleWrapper<'a>(&'a dyn pal::NativeWindow);
+
+impl<'a> raw_window_handle::HasWindowHandle for WindowHandleWrapper<'a> {
+    fn window_handle(
+        &self,
+    ) -> std::result::Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError>
+    {
+        Ok(unsafe { raw_window_handle::WindowHandle::borrow_raw(self.0.get_raw_handle()) })
+    }
+}
+
+impl<'a> raw_window_handle::HasDisplayHandle for WindowHandleWrapper<'a> {
+    fn display_handle(
+        &self,
+    ) -> std::result::Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError>
+    {
+        use raw_window_handle::{AppKitDisplayHandle, DisplayHandle, RawDisplayHandle};
+        Ok(unsafe {
+            DisplayHandle::borrow_raw(RawDisplayHandle::AppKit(AppKitDisplayHandle::new()))
+        })
+    }
+}
 
 struct WidgetShowcaseApp {
-    window: Window,
-    gui_context: GuiContext,
+    app: MacOSApp,
+    window: MacOSWindow,
+    widgets: WidgetContainer,
+    renderer: gui::Renderer,
     running: bool,
 }
 
 impl WidgetShowcaseApp {
     fn new() -> Result<Self> {
         // Initialize platform
-        let app = pal::MacOsApp::init()?;
+        let app = MacOSApp::init()?;
 
-        // Create window
-        let window = Window::new("Widget Showcase", 800, 600, pal::WindowType::Normal, None)?;
+        // Create window (standalone mode)
+        let mut window = unsafe { MacOSWindow::attach(std::ptr::null_mut())? };
+        window.set_size(800, 600)?;
 
-        // Initialize Vulkan
-        let vulkan_context = VulkanContext::new(&window)?;
-
-        // Create GUI context
-        let mut gui_context = GuiContext::new(window.get_handle(), Arc::new(vulkan_context))?;
+        // Initialize Vulkan renderer
+        let wrapper = WindowHandleWrapper(&window);
+        let renderer = gui::Renderer::new(&wrapper, 800, 600)
+            .context("Failed to initialize Vulkan renderer")?;
 
         // Setup widgets
-        Self::setup_widgets(&mut gui_context)?;
-
-        // Show window
-        window.show();
+        let widgets = Self::setup_widgets();
 
         Ok(Self {
+            app,
             window,
-            gui_context,
+            widgets,
+            renderer,
             running: true,
         })
     }
 
-    fn setup_widgets(gui_context: &mut GuiContext) -> Result<()> {
+    fn setup_widgets() -> WidgetContainer {
         let mut widgets = WidgetContainer::new();
 
-        // Title area - using buttons as labels
-        let title = Button::new("Widget Framework Showcase", 250.0, 20.0, 300.0, 40.0);
-        widgets.add_widget(Box::new(title));
-
         // Row 1: Buttons
-        let mut button1 = Button::new("Click Me!", 50.0, 100.0, 150.0, 40.0);
+        let button1 = Button::new("Click Me!", 50.0, 50.0, 150.0, 40.0);
         widgets.add_widget(Box::new(button1));
 
-        let mut button2 = Button::new("Button 2", 250.0, 100.0, 150.0, 40.0);
+        let mut button2 = Button::new("Focusable", 250.0, 50.0, 150.0, 40.0);
         button2.set_enabled(true);
         widgets.add_widget(Box::new(button2));
 
-        let mut button3 = Button::new("Disabled", 450.0, 100.0, 150.0, 40.0);
+        let mut button3 = Button::new("Disabled", 450.0, 50.0, 150.0, 40.0);
         button3.set_enabled(false);
         widgets.add_widget(Box::new(button3));
 
         // Row 2: Sliders
-        let label_slider = Button::new("Sliders:", 50.0, 170.0, 100.0, 30.0);
-        widgets.add_widget(Box::new(label_slider));
-
-        let mut slider_h = Slider::new_horizontal(50.0, 220.0, 300.0, 30.0);
+        let mut slider_h = Slider::new_horizontal(50.0, 120.0, 300.0, 30.0);
         slider_h.set_value(0.7);
         widgets.add_widget(Box::new(slider_h));
 
-        let mut slider_v = Slider::new_vertical(400.0, 170.0, 30.0, 150.0);
+        let mut slider_v = Slider::new_vertical(400.0, 120.0, 30.0, 150.0);
         slider_v.set_value(0.5);
         widgets.add_widget(Box::new(slider_v));
 
         // Row 3: Knobs
-        let label_knob = Button::new("Knobs:", 50.0, 350.0, 100.0, 30.0);
-        widgets.add_widget(Box::new(label_knob));
-
-        let mut knob1 = Knob::new(125.0, 420.0, 40.0);
+        let mut knob1 = Knob::new(125.0, 300.0, 40.0);
         knob1.set_value(0.3);
         widgets.add_widget(Box::new(knob1));
 
-        let mut knob2 = Knob::new(250.0, 420.0, 40.0);
+        let mut knob2 = Knob::new(250.0, 300.0, 40.0);
         knob2.set_value(0.6);
         widgets.add_widget(Box::new(knob2));
 
-        let mut knob3 = Knob::new(375.0, 420.0, 40.0);
+        let mut knob3 = Knob::new(375.0, 300.0, 40.0);
         knob3.set_value(0.9);
         widgets.add_widget(Box::new(knob3));
 
         // Row 4: Textbox
-        let label_text = Button::new("Text Input:", 50.0, 500.0, 120.0, 30.0);
-        widgets.add_widget(Box::new(label_text));
-
-        let textbox = Textbox::new(190.0, 500.0, 400.0, 40.0).with_placeholder("Type here...");
+        let textbox = Textbox::new(50.0, 450.0, 400.0, 40.0).with_placeholder("Type here...");
         widgets.add_widget(Box::new(textbox));
 
-        // Set the widgets
-        gui_context.set_widgets(widgets);
-
-        Ok(())
+        widgets
     }
 
     fn run(&mut self) -> Result<()> {
         info!("Widget Showcase starting...");
 
+        // Setup event callback
+        let (tx, rx) = std::sync::mpsc::channel();
+        let tx_cb = tx.clone();
+        self.window.event_router().set_callback(move |event| {
+            let _ = tx_cb.send(event);
+        });
+
         while self.running {
-            // Poll platform events
-            match self.window.poll_event() {
-                Some(Event::Close) => {
-                    info!("Window closed");
-                    self.running = false;
-                }
-                Some(event) => {
-                    // Convert to UIEvent and handle
-                    if let Some(ui_event) = Self::convert_event(event) {
-                        let _ = self.gui_context.handle_event(ui_event);
+            // Poll events
+            self.window.event_router().poll_events();
+            self.app.poll_events();
+
+            // Process events
+            while let Ok(event) = rx.try_recv() {
+                match event {
+                    PalEvent::Quit => {
+                        info!("Quit received");
+                        self.running = false;
+                    }
+                    _ => {
+                        // Forward to widgets
+                        self.widgets.handle_ui_event(event);
                     }
                 }
-                None => {}
             }
 
             // Render frame
-            self.gui_context.render()?;
+            self.renderer.draw_frame(Some(&self.widgets))?;
 
-            // Small sleep to avoid busy-waiting
-            std::thread::sleep(std::time::Duration::from_millis(16)); // ~60 FPS
+            // Small sleep
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
 
         info!("Widget Showcase exiting");
         Ok(())
     }
-
-    fn convert_event(event: Event) -> Option<gui::UIEvent> {
-        use gui::{MouseButton, UIEvent};
-
-        match event {
-            Event::MouseDown { x, y, button } => Some(UIEvent::MouseDown {
-                x,
-                y,
-                button: match button {
-                    0 => MouseButton::Left,
-                    1 => MouseButton::Right,
-                    _ => MouseButton::Middle,
-                },
-            }),
-            Event::MouseUp { x, y, button } => Some(UIEvent::MouseUp {
-                x,
-                y,
-                button: match button {
-                    0 => MouseButton::Left,
-                    1 => MouseButton::Right,
-                    _ => MouseButton::Middle,
-                },
-            }),
-            Event::MouseMove { x, y } => Some(UIEvent::MouseMove { x, y }),
-            Event::KeyDown { keycode } => Some(UIEvent::KeyDown {
-                key: gui::Key::Unknown, // TODO: Map keycodes
-            }),
-            Event::KeyUp { keycode } => Some(UIEvent::KeyUp {
-                key: gui::Key::Unknown,
-            }),
-            _ => None,
-        }
-    }
 }
 
 fn main() -> Result<()> {
-    // Initialize tracing
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();

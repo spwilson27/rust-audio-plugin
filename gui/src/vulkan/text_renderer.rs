@@ -617,8 +617,10 @@ impl TextRenderer {
     pub fn record_commands(
         &self,
         command_buffer: vk::CommandBuffer,
-        screen_width: u32,
-        screen_height: u32,
+        viewport_width: u32,
+        viewport_height: u32,
+        logical_width: f32,
+        logical_height: f32,
     ) {
         if self.vertex_count == 0 {
             return;
@@ -634,8 +636,8 @@ impl TextRenderer {
             let viewport = vk::Viewport {
                 x: 0.0,
                 y: 0.0,
-                width: screen_width as f32,
-                height: screen_height as f32,
+                width: viewport_width as f32,
+                height: viewport_height as f32,
                 min_depth: 0.0,
                 max_depth: 1.0,
             };
@@ -644,15 +646,15 @@ impl TextRenderer {
             let scissor = vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: vk::Extent2D {
-                    width: screen_width,
-                    height: screen_height,
+                    width: viewport_width,
+                    height: viewport_height,
                 },
             };
             self.device.cmd_set_scissor(command_buffer, 0, &[scissor]);
 
             // Push Constants
             let push_constants = TextPushConstants {
-                screen_size: [screen_width as f32, screen_height as f32],
+                screen_size: [logical_width, logical_height],
             };
             let push_ptr = &push_constants as *const TextPushConstants as *const u8;
             let push_slice =

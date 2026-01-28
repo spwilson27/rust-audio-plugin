@@ -26,7 +26,7 @@ use anyhow::Result;
 
 // Vulkan rendering backend
 pub mod fonts;
-mod vulkan;
+pub mod vulkan;
 
 // Widget framework
 pub mod widgets;
