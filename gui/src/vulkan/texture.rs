@@ -2,6 +2,7 @@ use super::VulkanContext;
 use anyhow::Result;
 use ash::vk;
 
+/// Create a 2D image and allocate memory for it.
 pub fn create_image(
     context: &VulkanContext,
     width: u32,
@@ -48,6 +49,7 @@ pub fn create_image(
     Ok((image, image_memory))
 }
 
+/// Create a view for a 2D image.
 pub fn create_image_view(
     device: &ash::Device,
     image: vk::Image,
@@ -69,6 +71,7 @@ pub fn create_image_view(
     unsafe { Ok(device.create_image_view(&view_info, None)?) }
 }
 
+/// Create a standard texture sampler (linear filtering, clamp edge).
 pub fn create_sampler(device: &ash::Device) -> Result<vk::Sampler> {
     let sampler_info = vk::SamplerCreateInfo::default()
         .mag_filter(vk::Filter::LINEAR)
@@ -87,6 +90,9 @@ pub fn create_sampler(device: &ash::Device) -> Result<vk::Sampler> {
     unsafe { Ok(device.create_sampler(&sampler_info, None)?) }
 }
 
+/// Transition an image layout using a pipeline barrier.
+///
+/// Uses a single-time command buffer.
 pub fn transition_image_layout(
     device: &ash::Device,
     command_pool: vk::CommandPool,
@@ -159,6 +165,10 @@ pub fn transition_image_layout(
     Ok(())
 }
 
+/// Copy buffer data to an image.
+///
+/// Uses a single-time command buffer.
+#[allow(clippy::too_many_arguments)]
 pub fn copy_buffer_to_image(
     device: &ash::Device,
     command_pool: vk::CommandPool,

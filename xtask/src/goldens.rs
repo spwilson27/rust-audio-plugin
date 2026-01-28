@@ -12,7 +12,7 @@ pub fn generate() -> Result<()> {
     println!("Running standalone to generate screenshot...");
     let status = Command::new("cargo")
         .current_dir(&root)
-        .args(&["run", "-p", "standalone", "--", "--test-screenshot"])
+        .args(["run", "-p", "standalone", "--", "--test-screenshot"])
         .status()
         .context("Failed to run standalone")?;
 
@@ -41,7 +41,7 @@ pub fn generate() -> Result<()> {
         .current_dir(&root)
         // Set env var to tell test to update golden
         .env("UPDATE_GOLDENS", "1")
-        .args(&["test", "--test", "text_resize_e2e", "--", "--nocapture"])
+        .args(["test", "--test", "text_resize_e2e", "--", "--nocapture"])
         .status()
         .context("Failed to run text_resize_e2e test")?;
 

@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use ash::vk;
 
+/// Manages the Vulkan swapchain, images, and presentation synchronization.
 pub struct Swapchain {
     swapchain_loader: ash::khr::swapchain::Device,
     swapchain: vk::SwapchainKHR,
@@ -16,6 +17,10 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
+    /// Create a new swapchain for the given window dimensions.
+    ///
+    /// Selects the best available surface format (SRGB), present mode (FIFO/Vsync preferred),
+    /// and extent.
     pub fn new(context: &super::VulkanContext, width: u32, height: u32) -> Result<Self> {
         let swapchain_loader =
             ash::khr::swapchain::Device::new(context.instance(), context.device());
@@ -174,22 +179,29 @@ impl Swapchain {
         self.format
     }
 
+    /// Get the image views for the swapchain images.
     pub fn image_views(&self) -> &[vk::ImageView] {
         &self.image_views
     }
 
+    /// Get the swapchain images.
     pub fn images(&self) -> &[vk::Image] {
         &self.images
     }
 
+    /// Get the raw Vulkan swapchain handle.
     pub fn swapchain(&self) -> vk::SwapchainKHR {
         self.swapchain
     }
 
+    /// Get the swapchain loader extension.
     pub fn loader(&self) -> &ash::khr::swapchain::Device {
         &self.swapchain_loader
     }
 
+    /// Acquire the next available image from the swapchain.
+    ///
+    /// Returns the image index and whether the swapchain is suboptimal.
     pub fn acquire_next_image(
         &self,
         timeout: u64,
@@ -203,6 +215,9 @@ impl Swapchain {
         }
     }
 
+    /// Manually clean up swapchain resources.
+    ///
+    /// Must be called before the device is destroyed.
     pub fn cleanup(&mut self, device: &ash::Device) {
         unsafe {
             for &view in &self.image_views {

@@ -9,13 +9,22 @@ use std::time::Instant;
 use super::shape_renderer::ShapeRenderer;
 use super::{Swapchain, VulkanContext};
 
+/// The main Vulkan renderer responsible for managing the swapchain,
+/// render passes, and coordinating sub-renderers (Shape, Text).
 pub struct Renderer {
+    /// Manages the presentation surface and images
     swapchain: Swapchain,
+    /// Pool for allocating command buffers
     command_pool: vk::CommandPool,
+    /// One command buffer per swapchain image
     command_buffers: Vec<vk::CommandBuffer>,
+    /// Semaphores signaling when an image is ready to be rendered to
     image_available_semaphores: Vec<vk::Semaphore>,
+    /// Semaphores signaling when rendering is complete and image can be presented
     render_finished_semaphores: Vec<vk::Semaphore>,
+    /// Fences to synchronize CPU and GPU frame submission
     in_flight_fences: Vec<vk::Fence>,
+
     current_frame: usize,
     max_frames_in_flight: usize,
     clear_color: [f32; 4],
@@ -23,8 +32,12 @@ pub struct Renderer {
     // Rendering resources
     render_pass: vk::RenderPass,
     framebuffers: Vec<vk::Framebuffer>,
+
+    /// Sub-renderer for 2D geometric shapes (SDF based)
     shape_renderer: ShapeRenderer,
+    /// Sub-renderer for text using a dynamic font atlas
     text_renderer: super::text_renderer::TextRenderer,
+    /// dynamic font texture atlas
     font_atlas: super::text_renderer::FontAtlas,
 
     // Frame timing
@@ -38,6 +51,13 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Creates a new Renderer instance, initializing Vulkan context, swapchain, and pipelines.
+    ///
+    /// # Arguments
+    ///
+    /// * `window_handle` - The raw window handle for surface creation.
+    /// * `width` - Initial window width.
+    /// * `height` - Initial window height.
     pub fn new(
         window_handle: &(impl HasWindowHandle + HasDisplayHandle),
         width: u32,
@@ -213,7 +233,10 @@ impl Renderer {
         self.fixed_fps = fps;
     }
 
-    /// Draw a single frame
+    /// Draw a single frame.
+    ///
+    /// This acquires an image from the swapchain, records commands to clear it and draw contents,
+    /// submits the commands to the GPU, and presents the image.
     pub fn draw_frame(&mut self) -> Result<()> {
         // Update frame timing
         self.update_frame_timing();

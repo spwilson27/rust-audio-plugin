@@ -114,16 +114,6 @@ pub use macos::MacOSWindow;
 #[cfg(target_os = "windows")]
 pub use win32::Win32Window;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_pal_compiles() {
-        // Basic compilation test
-        // Real tests will require window creation in Phase 2
-        assert!(true);
-    }
-}
-
 /// Core trait for application lifecycle management (Standalone mode)
 pub trait App {
     /// Initialize the application (e.g., NSApp)
@@ -141,3 +131,11 @@ pub use macos::MacOSApp;
 
 #[cfg(target_os = "windows")]
 pub use win32::Win32App;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_pal_compiles() {
+        // Basic compilation test
+    }
+}

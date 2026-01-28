@@ -30,6 +30,14 @@ enum Commands {
     },
     /// Generate golden images for testing
     Goldens,
+    /// Run clippy and fail on warnings
+    Lint,
+    /// Run coverage analysis
+    Coverage {
+        /// Verify coverage meets threshold (80%)
+        #[arg(long)]
+        verify: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -38,6 +46,8 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Bundle { release } => bundle(release),
         Commands::Goldens => goldens::generate(),
+        Commands::Lint => lint(),
+        Commands::Coverage { verify } => coverage(verify),
     }
 }
 
@@ -77,6 +87,66 @@ fn bundle(release: bool) -> Result<()> {
     println!("\n✅ Bundle complete!");
     print_bundle_location(&root)?;
 
+    Ok(())
+}
+
+fn lint() -> Result<()> {
+    println!("🔍 Running clippy...");
+    let status = Command::new("cargo")
+        .args([
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ])
+        .status()
+        .context("Failed to run cargo clippy")?;
+
+    if !status.success() {
+        bail!("Clippy checks failed!");
+    }
+    println!("  ✓ Clippy checks passed");
+    Ok(())
+}
+
+fn coverage(verify: bool) -> Result<()> {
+    println!("📊 Running coverage analysis...");
+
+    // Check if cargo-llvm-cov is installed
+    let version_check = Command::new("cargo")
+        .args(["llvm-cov", "--version"])
+        .output();
+
+    if version_check.is_err() {
+        println!("  ⚠️  cargo-llvm-cov not found. Installing...");
+        let install_status = Command::new("cargo")
+            .args(["install", "cargo-llvm-cov"])
+            .status()
+            .context("Failed to install cargo-llvm-cov")?;
+
+        if !install_status.success() {
+            bail!("Failed to install cargo-llvm-cov");
+        }
+    }
+
+    let mut cmd = Command::new("cargo");
+    cmd.args(["llvm-cov", "--workspace", "--exclude", "xtask"]);
+
+    if verify {
+        cmd.args(["--fail-under-lines", "80"]);
+    } else {
+        cmd.arg("--summary-only");
+    }
+
+    let status = cmd.status().context("Failed to run coverage")?;
+
+    if !status.success() {
+        bail!("Coverage check failed!");
+    }
+
+    println!("  ✓ Coverage check passed");
     Ok(())
 }
 

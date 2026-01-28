@@ -249,9 +249,7 @@ impl VulkanContext {
         let device_extension_names = vec![
             ash::khr::swapchain::NAME.as_ptr(),
             #[cfg(target_os = "macos")]
-            CStr::from_bytes_with_nul(b"VK_KHR_portability_subset\0")
-                .unwrap()
-                .as_ptr(),
+            c"VK_KHR_portability_subset".as_ptr(),
         ];
 
         let device_create_info = vk::DeviceCreateInfo::default()
@@ -270,7 +268,7 @@ impl VulkanContext {
         Ok((device, graphics_family, graphics_queue, present_queue))
     }
 
-    /// Get the physical device handle
+    /// Get the physical device handle.
     pub fn physical_device(&self) -> vk::PhysicalDevice {
         self.physical_device
     }
@@ -310,6 +308,7 @@ impl VulkanContext {
         &self.instance
     }
 
+    /// Find a memory type index that matches the filter and properties.
     pub fn find_memory_type(
         &self,
         type_filter: u32,
@@ -372,7 +371,5 @@ mod tests {
     #[test]
     fn test_vulkan_context_compiles() {
         // Basic compilation test
-        // Full initialization requires a window
-        assert!(true);
     }
 }

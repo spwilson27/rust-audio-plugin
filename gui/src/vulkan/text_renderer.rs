@@ -3,7 +3,7 @@ use ash::vk;
 use fontdue::{Font, FontSettings};
 use guillotiere::{AtlasAllocator, Size};
 use std::collections::HashMap;
-use std::ffi::CStr;
+
 use std::mem;
 
 use super::{buffer, texture, VulkanContext};
@@ -29,10 +29,15 @@ struct GlyphKey {
     px: u32,
 }
 
+/// Manages a dynamic texture atlas for font glyphs.
+///
+/// Uses `guillotiere` to pack glyphs into a single `R8_UNORM` texture.
+/// Uploads rasterized glyphs on demand via a staging buffer.
 pub struct FontAtlas {
     font: Font,
     allocator: AtlasAllocator,
-    cache: HashMap<GlyphKey, ([f32; 2], [f32; 2])>, // UV Min, UV Max
+    /// Cache of mapped glyphs: (char, size_px) -> (UV Min, UV Max)
+    cache: HashMap<GlyphKey, ([f32; 2], [f32; 2])>,
 
     // Vulkan Resources
     device: ash::Device,
@@ -50,6 +55,7 @@ pub struct FontAtlas {
 }
 
 impl FontAtlas {
+    /// Initialize the Atlas with a fixed size (e.g. 1024x1024).
     pub fn new(
         context: &VulkanContext,
         command_pool: vk::CommandPool,
@@ -104,6 +110,11 @@ impl FontAtlas {
         })
     }
 
+    /// Retrieve UV coordinates for a glyph.
+    ///
+    /// If the glyph is not in the atlas, it is rasterized and uploaded immediately.
+    /// This involves a GPU wait/upload, so it should ideally be batched or pre-warmed,
+    /// but for this implementation it happens on-demand per frame if missing.
     pub fn get_glyph_uv(
         &mut self,
         context: &VulkanContext,
@@ -233,6 +244,7 @@ impl Drop for FontAtlas {
 // ... Reimplement logic with Resources struct ...
 // Actually, let's just add `device: ash::Device` to FontAtlas.
 
+/// Renders text using textured quads sourced from a `FontAtlas`.
 pub struct TextRenderer {
     device: ash::Device,
     pipeline_layout: vk::PipelineLayout,
@@ -264,7 +276,7 @@ impl TextRenderer {
         let vert_module = super::shape_renderer::create_shader_module(&device, vert_code)?;
         let frag_module = super::shape_renderer::create_shader_module(&device, frag_code)?;
 
-        let main_function_name = CStr::from_bytes_with_nul(b"main\0")?;
+        let main_function_name = c"main";
 
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::default()
@@ -480,6 +492,10 @@ impl TextRenderer {
         self.vertex_count = 0;
     }
 
+    /// Draw a string of text.
+    ///
+    /// Appends quads to the internal vertex buffer.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_text(
         &mut self,
         context: &VulkanContext,
@@ -538,6 +554,7 @@ impl TextRenderer {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_quad(
         &mut self,
         x: f32,

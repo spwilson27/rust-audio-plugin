@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use ash::vk;
-use std::ffi::CStr;
+
 use std::mem;
 
 use super::VulkanContext;
@@ -43,7 +43,7 @@ impl ShapeRenderer {
         let vert_module = create_shader_module(&device, vert_code)?;
         let frag_module = create_shader_module(&device, frag_code)?;
 
-        let main_function_name = CStr::from_bytes_with_nul(b"main\0")?;
+        let main_function_name = c"main";
 
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::default()

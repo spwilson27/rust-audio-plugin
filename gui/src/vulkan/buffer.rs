@@ -2,6 +2,9 @@ use super::VulkanContext;
 use anyhow::Result;
 use ash::vk;
 
+/// Allocate a Vulkan buffer with the specified properties.
+///
+/// Returns the buffer and its allocated memory.
 pub fn create_buffer(
     context: &VulkanContext,
     size: vk::DeviceSize,
@@ -33,6 +36,7 @@ pub fn create_buffer(
     Ok((buffer, buffer_memory))
 }
 
+/// Helper to find a suitable memory type index.
 pub fn find_memory_type(
     context: &VulkanContext,
     type_filter: u32,

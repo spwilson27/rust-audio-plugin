@@ -39,12 +39,10 @@ fn test_vulkan_no_validation_errors() -> Result<()> {
         let reader = BufReader::new(stdout);
         let mut initialized = false;
 
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                if line.contains("Vulkan initialized!") {
-                    initialized = true;
-                    println!("✓ Vulkan initialized successfully");
-                }
+        for line in reader.lines().map_while(Result::ok) {
+            if line.contains("Vulkan initialized!") {
+                initialized = true;
+                println!("✓ Vulkan initialized successfully");
             }
         }
 
@@ -56,13 +54,11 @@ fn test_vulkan_no_validation_errors() -> Result<()> {
         let reader = BufReader::new(stderr);
         let mut vulkan_errors = Vec::new();
 
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                // Collect Vulkan errors
-                if line.contains("[Vulkan Error]") {
-                    vulkan_errors.push(line.clone());
-                    eprintln!("VULKAN ERROR: {}", line);
-                }
+        for line in reader.lines().map_while(Result::ok) {
+            // Collect Vulkan errors
+            if line.contains("[Vulkan Error]") {
+                vulkan_errors.push(line.clone());
+                eprintln!("VULKAN ERROR: {}", line);
             }
         }
 

@@ -84,6 +84,12 @@ pub struct GuiContext {
 
 impl GuiContext {
     /// Create a new GUI context attached to a parent window (plugin mode)
+    /// Attach the GUI to a parent window.
+    ///
+    /// # Safety
+    ///
+    /// The `parent` pointer must be a valid raw window handle for the target platform
+    /// (NSView* on macOS, HWND on Windows) and must remain valid for the lifetime of the GUI.
     pub unsafe fn attach(parent: *mut std::ffi::c_void, _width: u32, _height: u32) -> Result<Self> {
         #[cfg(target_os = "macos")]
         {

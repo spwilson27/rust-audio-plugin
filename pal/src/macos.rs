@@ -521,7 +521,7 @@ impl crate::NativeWindow for MacOSWindow {
                     width: width as f64,
                     height: height as f64,
                 };
-                let _: () = objc2::msg_send![&*window, setContentSize: new_size];
+                let _: () = objc2::msg_send![window, setContentSize: new_size];
 
                 // The view should autoresize if configured, or we assume it matches content view.
                 // But our view is a subview of content view?

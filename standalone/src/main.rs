@@ -7,9 +7,9 @@ use clap::Parser;
 
 // Import dependencies at crate level to avoid lookup issues
 #[cfg(target_os = "macos")]
-#[cfg(target_os = "macos")]
-#[cfg(target_os = "macos")]
 use pal::macos::MacOSWindow;
+#[cfg(target_os = "windows")]
+use pal::win32::Win32Window;
 
 // WindowHandleWrapper to implement raw_window_handle traits for &dyn NativeWindow
 struct WindowHandleWrapper<'a>(&'a dyn pal::NativeWindow);

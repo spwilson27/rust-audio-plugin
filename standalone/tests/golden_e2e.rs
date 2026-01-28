@@ -25,7 +25,7 @@ fn test_golden_image_verification() {
     // This ensures we use the same environment and build artifacts
     let status = Command::new("cargo")
         .current_dir(root_dir)
-        .args(&[
+        .args([
             "run",
             "-p",
             "standalone",

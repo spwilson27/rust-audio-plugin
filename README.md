@@ -35,7 +35,20 @@ cargo run --package xtask -- bundle
 cargo run --bin standalone
 
 # Run standalone in headless mode
+# Run standalone in headless mode
 cargo run --bin standalone -- --headless
+
+# Generate golden images for visual regression testing
+cargo run --package xtask -- goldens
+
+# Run code coverage analysis
+cargo run --package xtask -- coverage
+
+# Verify coverage (fails if < 80%)
+cargo run --package xtask -- coverage --verify
+
+# Run linting (clippy) with strict settings
+cargo run --package xtask -- lint
 ```
 
 ### Bundle Output
@@ -57,10 +70,24 @@ Compiled shaders: `target/shaders/*.spv`
 - macOS codesigning
 - PAL and GUI crate skeletons
 
-**Phase 2: Platform Abstraction Layer** - Skeleton created  
-**Phase 3: Graphics Core** - Not started  
-**Phase 4: Core Logic & Persistence** - Not started  
-**Phase 5: Test Harness (RPC)** - Not started
+**Phase 2: Platform Abstraction Layer** - Complete
+- Native windowing without winit (macOS/Cocoa)
+- Parent-child window attachment
+- High-performance event loop (CVDisplayLink)
+
+**Phase 3: Graphics Core** - Complete
+- Vulkan rendering engine
+- SDF-based 2D shape rendering (Rect, Circle, RoundedRect)
+- GPU-accelerated text rendering (Fontdue + Glyph Packing)
+- Golden image testing infrastructure
+
+**Phase 3.5: Documentation & Hardening** - Complete
+- Comprehensive docstrings
+- Strict linting (0 warnings)
+- Code coverage infrastructure (>80%)
+
+**Phase 4: Core Logic & Persistence** - Next
+**Phase 5: Test Harness (RPC)** - Planned
 
 ## Project Structure
 
