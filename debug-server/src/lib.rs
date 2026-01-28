@@ -152,6 +152,47 @@ impl DebugControl for DebugControlImpl {
             height,
         }))
     }
+
+    async fn get_widget_state(
+        &self,
+        request: Request<debug_control::WidgetIdMsg>,
+    ) -> Result<Response<debug_control::WidgetState>, Status> {
+        // TODO: Implement widget state query
+        // This requires GuiContext integration to access the WidgetContainer
+        let widget_id = request.into_inner().widget_id;
+
+        // Placeholder: Return unimplemented error
+        Err(Status::unimplemented(format!(
+            "GetWidgetState not yet implemented for widget {}",
+            widget_id
+        )))
+    }
+
+    async fn set_widget_value(
+        &self,
+        request: Request<debug_control::SetWidgetValueMsg>,
+    ) -> Result<Response<debug_control::Ack>, Status> {
+        // TODO: Implement widget value setting
+        // This requires GuiContext integration to access the WidgetContainer
+        let msg = request.into_inner();
+
+        // Placeholder: Return unimplemented error
+        Err(Status::unimplemented(format!(
+            "SetWidgetValue not yet implemented for widget {} (value: {})",
+            msg.widget_id, msg.value
+        )))
+    }
+
+    async fn list_widgets(
+        &self,
+        _request: Request<debug_control::Empty>,
+    ) -> Result<Response<debug_control::WidgetList>, Status> {
+        // TODO: Implement widget listing
+        // This requires GuiContext integration to access the WidgetContainer
+
+        // Placeholder: Return empty list
+        Ok(Response::new(debug_control::WidgetList { widgets: vec![] }))
+    }
 }
 
 fn map_mouse_event(msg: MouseMsg) -> UIEvent {

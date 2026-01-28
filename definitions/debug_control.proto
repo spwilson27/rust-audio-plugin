@@ -5,6 +5,11 @@ service DebugControl {
     rpc SendInputEvent (InputEventMsg) returns (Ack);
     rpc ResizeWindow (ResizeMsg) returns (Ack);
     rpc CaptureScreen (Empty) returns (ImageBytes);
+    
+    // Widget testing RPCs
+    rpc GetWidgetState (WidgetIdMsg) returns (WidgetState);
+    rpc SetWidgetValue (SetWidgetValueMsg) returns (Ack);
+    rpc ListWidgets (Empty) returns (WidgetList);
 }
 
 message InputEventMsg {
@@ -51,6 +56,72 @@ message ImageBytes {
     uint32 height = 3;
 }
 
+
 message Ack {
     bool success = 1;
+}
+
+// Widget testing messages
+
+message WidgetIdMsg {
+    uint64 widget_id = 1;
+}
+
+message SetWidgetValueMsg {
+    uint64 widget_id = 1;
+    double value = 2;
+}
+
+message WidgetState {
+    uint64 widget_id = 1;
+    string widget_type = 2;  // "Button", "Slider", "Knob", "Textbox"
+    
+    // Common widget properties
+    bool focused = 3;
+    bool enabled = 4;
+    Rect bounds = 5;
+    
+    // Widget-specific state (use appropriate field based on widget_type)
+    oneof specific_state {
+        ButtonState button = 10;
+        SliderState slider = 11;
+        KnobState knob = 12;
+        TextboxState textbox = 13;
+    }
+}
+
+message Rect {
+    float x = 1;
+    float y = 2;
+    float width = 3;
+    float height = 4;
+}
+
+message ButtonState {
+    string label = 1;
+    string state = 2;  // "Normal", "Hovered", "Pressed"
+}
+
+message SliderState {
+    double value = 1;  // [0.0, 1.0]
+    string orientation = 2;  // "Horizontal", "Vertical"
+    bool dragging = 3;
+}
+
+message KnobState {
+    double value = 1;  // [0.0, 1.0]
+    float min_angle = 2;
+    float max_angle = 3;
+    bool dragging = 4;
+}
+
+message TextboxState {
+    string text = 1;
+    uint32 cursor_pos = 2;
+    bool has_selection = 3;
+    string placeholder = 4;
+}
+
+message WidgetList {
+    repeated WidgetState widgets = 1;
 }

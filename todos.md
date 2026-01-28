@@ -103,6 +103,23 @@
   - [ ] Add golden image tests
 
 ## Phase 4: Polish & Testing
+- [x] Create demo example
+  - [x] Create `gui/tests/widget_demo.rs`
+  - [x] Demonstrate ManualLayout with custom positioning
+  - [x] Demonstrate GridLayout with all widgets
+  - [x] Demonstrate FlexLayout for responsive design
+  - [x] Wire up event simulation to log interactions
+- [x] Extend RPC for widget testing
+  - [x] Modify `debug_control.proto` to add GetWidgetState (uses WidgetId)
+  - [x] Add SetWidgetValue RPC method
+  - [x] Add ListWidgets RPC method
+  - [x] Add widget state message types (ButtonState, SliderState, KnobState, TextboxState)
+  - [x] Implement stub RPC handlers in `debug-server`
+- [ ] Implement full widget RPC integration
+  - [ ] Add GuiContext to DebugControlImpl for widget access
+  - [ ] Implement GetWidgetState to query actual widget data
+  - [ ] Implement SetWidgetValue to programmatically control widgets
+  - [ ] Write integration tests using RPC client
 - [ ] Visual polish
   - [ ] Define hardcoded color palette (background, text, accent, etc.)
   - [ ] Add focus indicators (outline/glow)
