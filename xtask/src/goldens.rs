@@ -1,39 +1,39 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use testlib;
 
-/// Run the standalone app to generate a screenshot, then copy it to the goldens directory.
+/// Run the standalone app to generate a screenshot via RPC, then copy it to the goldens directory.
 pub fn generate() -> Result<()> {
     println!("Generating golden images...");
     let root = project_root();
     let goldens_dir = root.join("standalone/tests/goldens");
     std::fs::create_dir_all(&goldens_dir)?;
 
-    println!("Running standalone to generate screenshot...");
-    let status = Command::new("cargo")
+    println!("Building standalone...");
+    let build_status = Command::new("cargo")
         .current_dir(&root)
-        .args(["run", "-p", "standalone", "--", "--test-screenshot"])
+        .args(["build", "-p", "standalone"])
         .status()
-        .context("Failed to run standalone")?;
+        .context("Failed to build standalone")?;
 
-    if !status.success() {
-        anyhow::bail!("Standalone application failed");
+    if !build_status.success() {
+        anyhow::bail!("Failed to build standalone");
     }
 
-    let screenshot_path = root.join("screenshot.png");
-    if !screenshot_path.exists() {
-        anyhow::bail!(
-            "Screenshot was not generated at {}",
-            screenshot_path.display()
-        );
-    }
+    // Use testlib to capture golden image
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("Failed to create tokio runtime")?;
 
+    let img = rt.block_on(async { testlib::capture_golden(&root).await })?;
+
+    // Save golden image
     let golden_path = goldens_dir.join("standalone_screenshot.png");
-    std::fs::copy(&screenshot_path, &golden_path)?;
-    println!("Golden image updated at {}", golden_path.display());
-
-    // Cleanup
-    let _ = std::fs::remove_file(screenshot_path);
+    img.save(&golden_path)
+        .context("Failed to save golden image")?;
+    println!("Golden image saved to {}", golden_path.display());
 
     // Also generate resize test golden
     println!("Running text_resize_e2e test to generate golden...");

@@ -31,3 +31,4 @@ objc2-app-kit = { version = "0.2", features = ["NSApplication", "NSWindow"] }
 tokio = { version = "1.0", features = ["full"] }
 serde_json = "1.0"
 tonic = "0.12"
+testlib = { path = "../testlib" }

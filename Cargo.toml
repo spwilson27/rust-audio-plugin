@@ -8,6 +8,7 @@ members = [
     "pal",
     "gui",
     "debug-server",
+    "testlib",
 ]
 
 [workspace.package]
