@@ -339,11 +339,20 @@ impl WidgetContainer {
         &self,
         shape_renderer: &mut ShapeRenderer,
         text_renderer: &mut TextRenderer,
+        vulkan_context: &crate::VulkanContext,
+        font_atlas: &mut crate::vulkan::text_renderer::FontAtlas,
         screen_width: u32,
         screen_height: u32,
     ) {
         for widget in &self.widgets {
-            widget.render(shape_renderer, text_renderer, screen_width, screen_height);
+            widget.render(
+                shape_renderer,
+                text_renderer,
+                vulkan_context,
+                font_atlas,
+                screen_width,
+                screen_height,
+            );
         }
     }
 
@@ -409,6 +418,8 @@ mod tests {
             &self,
             _shape_renderer: &mut ShapeRenderer,
             _text_renderer: &mut TextRenderer,
+            _vulkan_context: &crate::VulkanContext,
+            _font_atlas: &mut crate::vulkan::text_renderer::FontAtlas,
             _screen_width: u32,
             _screen_height: u32,
         ) {

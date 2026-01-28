@@ -37,6 +37,8 @@ pub trait Widget: Send {
         &self,
         shape_renderer: &mut ShapeRenderer,
         text_renderer: &mut TextRenderer,
+        vulkan_context: &super::VulkanContext,
+        font_atlas: &mut super::vulkan::text_renderer::FontAtlas,
         screen_width: u32,
         screen_height: u32,
     );

@@ -303,6 +303,8 @@ impl Widget for Textbox {
         &self,
         shape_renderer: &mut ShapeRenderer,
         _text_renderer: &mut TextRenderer,
+        _vulkan_context: &crate::VulkanContext,
+        _font_atlas: &mut crate::vulkan::text_renderer::FontAtlas,
         _screen_width: u32,
         _screen_height: u32,
     ) {
@@ -339,13 +341,43 @@ impl Widget for Textbox {
             2.0,
         );
 
-        // TODO: Draw text with TextRenderer
-        // TODO: Draw selection highlight
-        // TODO: Draw cursor (blinking vertical line)
+        // Text rendering
+        let text_x = self.bounds.x + 5.0; // Left padding
+        let text_y = self.bounds.y + self.bounds.height / 2.0 + 6.0; // Vertical center
+        let text_size = 16.0;
 
-        // For now, just draw a simple cursor indicator
+        if self.text.is_empty() && !self.placeholder.is_empty() && !self.focused {
+            // Draw placeholder text
+            let _ = _text_renderer.draw_text(
+                _vulkan_context,
+                _font_atlas,
+                &self.placeholder,
+                text_x,
+                text_y,
+                text_size,
+                [0.5, 0.5, 0.5, 1.0], // Gray placeholder
+            );
+        } else if !self.text.is_empty() {
+            // Draw actual text
+            let _ = _text_renderer.draw_text(
+                _vulkan_context,
+                _font_atlas,
+                &self.text,
+                text_x,
+                text_y,
+                text_size,
+                [0.9, 0.9, 0.9, 1.0], // White text
+            );
+        }
+
+        // TODO: Draw selection highlight if has_selection()
+        // This would require calculating text width up to selection points
+
+        // Draw cursor if focused
         if self.focused {
-            let cursor_x = self.bounds.x + 5.0; // Placeholder position
+            // TODO: Calculate cursor X position based on text width up to cursor_pos
+            // For now, use a simple approximation
+            let cursor_x = text_x + (self.cursor_pos as f32 * 8.0); // Approximate character width
             let cursor_y = self.bounds.y + 5.0;
             let cursor_height = self.bounds.height - 10.0;
 

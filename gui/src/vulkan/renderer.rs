@@ -46,6 +46,9 @@ pub struct Renderer {
     current_fps: f32,
     fixed_fps: Option<f32>,
 
+    // Widget container (optional)
+    widget_container: Option<crate::widgets::container::WidgetContainer>,
+
     // Context must be last to be dropped last
     context: VulkanContext,
 }
@@ -158,6 +161,7 @@ impl Renderer {
             last_frame_time: None,
             current_fps: 0.0,
             fixed_fps: None,
+            widget_container: None,
         })
     }
 
@@ -233,6 +237,11 @@ impl Renderer {
         self.fixed_fps = fps;
     }
 
+    /// Set widget container for rendering
+    pub fn set_widgets(&mut self, container: crate::widgets::container::WidgetContainer) {
+        self.widget_container = Some(container);
+    }
+
     /// Draw a single frame.
     ///
     /// This acquires an image from the swapchain, records commands to clear it and draw contents,
@@ -290,34 +299,48 @@ impl Renderer {
                 vk::SubpassContents::INLINE,
             );
 
-            // Shape Rendering
+            // Initialize renderers
             self.shape_renderer.begin();
+            self.text_renderer.begin();
 
             let w = self.swapchain.extent().width as f32;
             let h = self.swapchain.extent().height as f32;
-            let cx = w / 2.0;
-            let cy = h / 2.0;
 
-            // Test Pattern
-            // Blue button
-            self.shape_renderer.draw_rect(
-                cx - 100.0,
-                cy + 50.0,
-                200.0,
-                60.0,
-                [0.2, 0.2, 0.8, 1.0],
-                10.0,
-            );
+            // Render widgets if available, otherwise render test pattern
+            if let Some(ref widgets) = self.widget_container {
+                widgets.render(
+                    &mut self.shape_renderer,
+                    &mut self.text_renderer,
+                    &self.context,
+                    &mut self.font_atlas,
+                    w as u32,
+                    h as u32,
+                );
+            } else {
+                // Test Pattern (fallback when no widgets set)
+                let cx = w / 2.0;
+                let cy = h / 2.0;
 
-            // Red circle
-            self.shape_renderer
-                .draw_circle(cx, cy - 50.0, 40.0, [0.8, 0.2, 0.2, 1.0]);
+                // Blue button
+                self.shape_renderer.draw_rect(
+                    cx - 100.0,
+                    cy + 50.0,
+                    200.0,
+                    60.0,
+                    [0.2, 0.2, 0.8, 1.0],
+                    10.0,
+                );
 
-            // Default Rect
-            self.shape_renderer
-                .draw_rect(50.0, 50.0, 100.0, 100.0, [1.0, 1.0, 0.0, 1.0], 0.0);
+                // Red circle
+                self.shape_renderer
+                    .draw_circle(cx, cy - 50.0, 40.0, [0.8, 0.2, 0.2, 1.0]);
 
-            // FPS Overlay
+                // Default Rect
+                self.shape_renderer
+                    .draw_rect(50.0, 50.0, 100.0, 100.0, [1.0, 1.0, 0.0, 1.0], 0.0);
+            }
+
+            // FPS Overlay (always show)
             let fps_width = (self.current_fps / 60.0 * 100.0).clamp(0.0, 100.0);
             let color = if self.current_fps > 55.0 {
                 [0.0, 1.0, 0.0, 1.0] // Green
@@ -329,15 +352,7 @@ impl Renderer {
             self.shape_renderer
                 .draw_rect(10.0, h - 30.0, fps_width, 20.0, color, 0.0);
 
-            self.shape_renderer
-                .record_commands(command_buffer, w as u32, h as u32);
-
-            // Shape Rendering End (if explicit end needed? no)
-
-            // Text Rendering
-            self.text_renderer.begin();
-
-            // Draw FPS Text
+            // FPS Text
             let fps_text = format!(
                 "FPS: {:.1} ({:.2}ms)",
                 self.current_fps,
@@ -353,6 +368,9 @@ impl Renderer {
                 [1.0, 1.0, 1.0, 1.0],
             )?;
 
+            // Record all rendering commands
+            self.shape_renderer
+                .record_commands(command_buffer, w as u32, h as u32);
             self.text_renderer
                 .record_commands(command_buffer, w as u32, h as u32);
 

@@ -141,6 +141,8 @@ impl Widget for Button {
         &self,
         shape_renderer: &mut ShapeRenderer,
         text_renderer: &mut TextRenderer,
+        _vulkan_context: &crate::VulkanContext,
+        _font_atlas: &mut crate::vulkan::text_renderer::FontAtlas,
         _screen_width: u32,
         _screen_height: u32,
     ) {
@@ -204,24 +206,20 @@ impl Widget for Button {
         }
 
         // Draw label text (centered)
-        // TODO: Text rendering requires VulkanContext and FontAtlas
-        // This will be implemented when we integrate with the full Renderer
-        let _text_x = self.bounds.x + self.bounds.width / 2.0;
-        let _text_y = self.bounds.y + self.bounds.height / 2.0;
+        // TODO: Calculate text width for proper centering
+        let text_x = self.bounds.x + 10.0; // Left-aligned with padding for now
+        let text_y = self.bounds.y + self.bounds.height / 2.0 + 6.0; // Vertical center (approximate)
+        let text_size = 16.0;
 
-        // text_renderer.draw_text(
-        //     context,
-        //     atlas,
-        //     &self.label,
-        //     16.0,
-        //     text_x,
-        //     text_y,
-        //     text_color,
-        // );
-
-        // For now, we just render the button shape
-        let _ = text_renderer; // Suppress unused warning
-        let _ = text_color;
+        let _ = text_renderer.draw_text(
+            _vulkan_context,
+            _font_atlas,
+            &self.label,
+            text_x,
+            text_y,
+            text_size,
+            text_color,
+        );
     }
 
     fn bounds(&self) -> Rect {

@@ -3,53 +3,66 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use testlib;
 
-/// Run the standalone app to generate a screenshot via RPC, then copy it to the goldens directory.
+/// Run test-e2e to generate golden images
 pub fn generate() -> Result<()> {
     println!("Generating golden images...");
     let root = project_root();
-    let goldens_dir = root.join("standalone/tests/goldens");
+    let goldens_dir = root.join("test-e2e/goldens");
     std::fs::create_dir_all(&goldens_dir)?;
 
-    println!("Building standalone...");
+    println!("Building test-e2e...");
     let build_status = Command::new("cargo")
         .current_dir(&root)
-        .args(["build", "-p", "standalone"])
+        .args(["build", "-p", "test-e2e"])
         .status()
-        .context("Failed to build standalone")?;
+        .context("Failed to build test-e2e")?;
 
     if !build_status.success() {
-        anyhow::bail!("Failed to build standalone");
+        anyhow::bail!("Failed to build test-e2e");
     }
 
-    // Use testlib to capture golden image
+    // Create tokio runtime
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("Failed to create tokio runtime")?;
 
-    let img = rt.block_on(async { testlib::capture_golden(&root).await })?;
+    // Generate widget showcase golden
+    println!("\n=== Generating Widget Showcase Golden ===");
+    let widget_img =
+        rt.block_on(async { testlib::capture_test_e2e_golden(&root, "widgets").await })?;
 
-    // Save golden image
-    let golden_path = goldens_dir.join("standalone_screenshot.png");
-    img.save(&golden_path)
-        .context("Failed to save golden image")?;
-    println!("Golden image saved to {}", golden_path.display());
+    let widget_golden_path = goldens_dir.join("widgets_showcase.png");
+    widget_img
+        .save(&widget_golden_path)
+        .context("Failed to save widget golden")?;
+    println!("Widget golden saved to {}", widget_golden_path.display());
 
-    // Also generate resize test golden
-    println!("Running text_resize_e2e test to generate golden...");
-    let status = Command::new("cargo")
+    // Also generate standalone golden (for backwards compatibility)
+    println!("\n=== Generating Standalone Golden ===");
+    println!("Building standalone...");
+    let standalone_status = Command::new("cargo")
         .current_dir(&root)
-        // Set env var to tell test to update golden
-        .env("UPDATE_GOLDENS", "1")
-        .args(["test", "--test", "text_resize_e2e", "--", "--nocapture"])
+        .args(["build", "-p", "standalone"])
         .status()
-        .context("Failed to run text_resize_e2e test")?;
+        .context("Failed to build standalone")?;
 
-    if !status.success() {
-        anyhow::bail!("text_resize_e2e generation failed");
+    if !standalone_status.success() {
+        anyhow::bail!("Failed to build standalone");
     }
 
-    println!("All goldens generated successfully.");
+    let standalone_img = rt.block_on(async { testlib::capture_golden(&root).await })?;
+
+    let standalone_golden_path = goldens_dir.join("standalone_screenshot.png");
+    standalone_img
+        .save(&standalone_golden_path)
+        .context("Failed to save standalone golden")?;
+    println!(
+        "Standalone golden saved to {}",
+        standalone_golden_path.display()
+    );
+
+    println!("\nAll goldens generated successfully!");
     Ok(())
 }
 

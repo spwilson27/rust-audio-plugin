@@ -165,6 +165,8 @@ impl Widget for Slider {
         &self,
         shape_renderer: &mut ShapeRenderer,
         _text_renderer: &mut TextRenderer,
+        _vulkan_context: &crate::VulkanContext,
+        _font_atlas: &mut crate::vulkan::text_renderer::FontAtlas,
         _screen_width: u32,
         _screen_height: u32,
     ) {
@@ -217,6 +219,20 @@ impl Widget for Slider {
                         3.0,
                     );
                 }
+
+                // Draw value text
+                let value_text = format!("{:.0}%", self.value * 100.0);
+                let text_x = self.bounds.x + self.bounds.width + 10.0;
+                let text_y = self.bounds.y + self.bounds.height / 2.0 + 6.0;
+                let _ = _text_renderer.draw_text(
+                    _vulkan_context,
+                    _font_atlas,
+                    &value_text,
+                    text_x,
+                    text_y,
+                    14.0,
+                    [0.9, 0.9, 0.9, 1.0],
+                );
             }
             SliderOrientation::Vertical => {
                 // Draw track
@@ -257,6 +273,20 @@ impl Widget for Slider {
                         3.0,
                     );
                 }
+
+                // Draw value text
+                let value_text = format!("{:.0}%", self.value * 100.0);
+                let text_x = self.bounds.x + self.bounds.width / 2.0 - 10.0; // Centered below slider
+                let text_y = self.bounds.y + self.bounds.height + 20.0;
+                let _ = _text_renderer.draw_text(
+                    _vulkan_context,
+                    _font_atlas,
+                    &value_text,
+                    text_x,
+                    text_y,
+                    14.0,
+                    [0.9, 0.9, 0.9, 1.0],
+                );
             }
         }
     }

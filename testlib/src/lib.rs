@@ -27,7 +27,9 @@ pub fn cleanup_lockfiles() -> Result<()> {
         for entry in entries.flatten() {
             let path = entry.path();
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with("splug_pid_") && name.ends_with(".json") {
+                if (name.starts_with("splug_pid_") || name.starts_with("test_e2e_pid_"))
+                    && name.ends_with(".json")
+                {
                     let _ = std::fs::remove_file(path);
                 }
             }
@@ -64,7 +66,10 @@ pub async fn wait_for_lockfile(timeout: Duration) -> Result<PathBuf> {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with("splug_pid_") && name.ends_with(".json") {
+                    // Look for both splug_pid and test_e2e_pid lockfiles
+                    if (name.starts_with("splug_pid_") || name.starts_with("test_e2e_pid_"))
+                        && name.ends_with(".json")
+                    {
                         if let Ok(metadata) = std::fs::metadata(&path) {
                             if let Ok(created) = metadata.created() {
                                 if created > recent_time {
@@ -176,7 +181,53 @@ pub async fn capture_golden(root_dir: &Path) -> Result<image::RgbaImage> {
     let lockfile_path = wait_for_lockfile(Duration::from_secs(10)).await?;
     let info = parse_lockfile(&lockfile_path)?;
 
-    println!("Connected to standalone on port {} (PID {})", info.port, info.pid);
+    println!(
+        "Connected to standalone on port {} (PID {})",
+        info.port, info.pid
+    );
+
+    let mut client = connect_rpc(info.port, Duration::from_secs(5)).await?;
+
+    // Wait for rendering to stabilize
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    println!("Requesting screenshot...");
+    let img = capture_screenshot(&mut client).await?;
+
+    println!("Sending Quit command...");
+    quit_standalone(&mut client).await?;
+
+    // Wait for child to exit
+    let _ = child.wait();
+
+    Ok(img)
+}
+
+/// Spawn test-e2e process in background with specified mode
+fn spawn_test_e2e(root_dir: &Path, mode: &str) -> Result<Child> {
+    cleanup_lockfiles()?;
+    Command::new("cargo")
+        .current_dir(root_dir)
+        .args(["run", "-p", "test-e2e", "--", "--mode", mode])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .context("Failed to spawn test-e2e")
+}
+
+/// Complete workflow: spawn test-e2e with mode, capture screenshot, and quit
+pub async fn capture_test_e2e_golden(root_dir: &Path, mode: &str) -> Result<image::RgbaImage> {
+    println!("Starting test-e2e in {} mode...", mode);
+    let mut child = spawn_test_e2e(root_dir, mode)?;
+
+    println!("Waiting for RPC server...");
+    let lockfile_path = wait_for_lockfile(Duration::from_secs(10)).await?;
+    let info = parse_lockfile(&lockfile_path)?;
+
+    println!(
+        "Connected to test-e2e on port {} (PID {})",
+        info.port, info.pid
+    );
 
     let mut client = connect_rpc(info.port, Duration::from_secs(5)).await?;
 

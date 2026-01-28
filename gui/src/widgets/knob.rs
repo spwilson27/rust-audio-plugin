@@ -160,6 +160,8 @@ impl Widget for Knob {
         &self,
         shape_renderer: &mut ShapeRenderer,
         _text_renderer: &mut TextRenderer,
+        _vulkan_context: &crate::VulkanContext,
+        _font_atlas: &mut crate::vulkan::text_renderer::FontAtlas,
         _screen_width: u32,
         _screen_height: u32,
     ) {
@@ -225,6 +227,20 @@ impl Widget for Knob {
         if self.focused {
             shape_renderer.draw_circle(cx, cy, radius + 3.0, focus_color);
         }
+
+        // Draw value text below knob
+        let value_text = format!("{:.0}%", self.value * 100.0);
+        let text_x = cx - 15.0; // Approximate centering
+        let text_y = cy + radius + 20.0; // Below the knob
+        let _ = _text_renderer.draw_text(
+            _vulkan_context,
+            _font_atlas,
+            &value_text,
+            text_x,
+            text_y,
+            14.0,
+            [0.9, 0.9, 0.9, 1.0],
+        );
     }
 
     fn bounds(&self) -> Rect {
