@@ -11,16 +11,15 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-clap = { version = "4.5", features = ["derive"] }
 gui = { path = "../gui" }
-pal = { path = "../pal" }
+clap = { version = "4.5", features = ["derive"] }
 debug-server = { path = "../debug-server" }
 crossbeam-channel = "0.5"
+pal = { path = "../pal" }
 raw-window-handle.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
-image.workspace = true
 # Platform-specific dependencies for standalone window creation
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"

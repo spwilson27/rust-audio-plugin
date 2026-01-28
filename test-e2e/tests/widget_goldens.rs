@@ -2,8 +2,7 @@
 //!
 //! Verifies that all 4 widgets render correctly with text
 
-use image::RgbaImage;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 #[tokio::test]
@@ -40,34 +39,5 @@ async fn test_widget_showcase_golden() {
         .expect("Failed to capture golden");
 
     // Verify against golden
-    verify_golden(&img, &golden_path);
-}
-
-fn verify_golden(current_img: &RgbaImage, golden_path: &Path) {
-    let golden_img = image::open(golden_path)
-        .expect("Failed to open golden image")
-        .to_rgba8();
-
-    assert_eq!(
-        current_img.dimensions(),
-        golden_img.dimensions(),
-        "Dimensions mismatch"
-    );
-
-    let mut diff_pixels = 0;
-    for (x, y, pixel) in current_img.enumerate_pixels() {
-        let golden_pixel = golden_img.get_pixel(x, y);
-        if pixel != golden_pixel {
-            diff_pixels += 1;
-        }
-    }
-
-    if diff_pixels > 0 {
-        // Save failure image
-        let _ = current_img.save("test_failure_widgets.png");
-        panic!(
-            "Images differ by {} pixels. Saved test_failure_widgets.png",
-            diff_pixels
-        );
-    }
+    testlib::verify_golden(&img, &golden_path);
 }

@@ -17,6 +17,7 @@ impl StandaloneProcess {
         // Launch standalone in headless mode
         let mut child = Command::new(cargo_bin)
             .arg("--headless")
+            .arg("--debug-server")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

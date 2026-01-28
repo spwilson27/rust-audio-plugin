@@ -28,8 +28,6 @@ enum Commands {
         #[arg(long, default_value_t = true)]
         release: bool,
     },
-    /// Generate golden images for testing
-    Goldens,
     /// Run clippy and fail on warnings
     Lint,
     /// Run coverage analysis
@@ -45,13 +43,10 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Bundle { release } => bundle(release),
-        Commands::Goldens => goldens::generate(),
         Commands::Lint => lint(),
         Commands::Coverage { verify } => coverage(verify),
     }
 }
-
-mod goldens;
 
 /// Main bundle command - orchestrates the entire build process
 fn bundle(release: bool) -> Result<()> {

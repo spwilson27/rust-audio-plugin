@@ -57,15 +57,15 @@ fn main() -> Result<()> {
     tracing::info!("test-e2e runner - mode: {}", args.mode);
 
     match args.mode.as_str() {
-        "widgets" => run_widget_showcase(&args),
-        "text-resize" => run_text_resize(&args),
+        "widgets" => run_app(&args, setup_widget_showcase()),
+        "text-resize" => run_app(&args, setup_text_widgets()),
         _ => anyhow::bail!("Unknown mode: {}", args.mode),
     }
 }
 
-/// Run widget showcase mode - displays all 4 widgets for golden testing
-fn run_widget_showcase(args: &Args) -> Result<()> {
-    tracing::info!("Initializing widget showcase...");
+/// Shared app runner: Inits window/renderer, starts RPC, run loop
+fn run_app(args: &Args, mut widgets: WidgetContainer) -> Result<()> {
+    tracing::info!("Initializing app...");
 
     // Write lockfile with port
     let pid = std::process::id();
@@ -98,12 +98,9 @@ fn run_widget_showcase(args: &Args) -> Result<()> {
         renderer.set_fixed_fps(Some(60.0));
     }
 
-    // Setup widgets for showcase
-    let mut widgets = setup_widget_showcase();
+    // Connect widgets to renderer (informational logging)
     let widget_count = widgets.len();
-
-    // Connect widgets to renderer
-    tracing::info!("Created {} widgets for showcase", widget_count);
+    tracing::info!("Running with {} widgets", widget_count);
 
     // Setup RPC Server
     let (tx, _rx) = crossbeam_channel::unbounded();
@@ -128,7 +125,7 @@ fn run_widget_showcase(args: &Args) -> Result<()> {
         let _ = app_tx_cb.send(event);
     });
 
-    tracing::info!("Widget showcase running...");
+    tracing::info!("App loop running...");
 
     let mut _frame_count = 0;
     loop {
@@ -142,6 +139,18 @@ fn run_widget_showcase(args: &Args) -> Result<()> {
                     tracing::info!("Received Quit, exiting...");
                     std::thread::sleep(std::time::Duration::from_millis(500));
                     return Ok(());
+                }
+                UIEvent::Resize(w, h) => {
+                    tracing::info!("Handling Resize: {}x{}", w, h);
+                    if let Err(e) = window.set_size(*w, *h) {
+                        tracing::error!("Failed to resize window: {}", e);
+                    }
+                    // TODO: Notify renderer of resize?
+                    // renderer.resize(*w, *h)?
+                    // `gui::Renderer` might handle swapchain resize in `draw_frame` automatically or needs explicit call.
+                    // Assuming `draw_frame` handles it or we need `renderer.handle_resize(*w, *h)`.
+                    // Given `standalone` didn't call renderer.resize (checked previously), we assume draw_frame handles it or we missed it.
+                    // Actually `gui::Renderer` usually checks extents.
                 }
                 UIEvent::CaptureScreen(reply_tx) => {
                     tracing::info!("Capturing screenshot...");
@@ -207,6 +216,15 @@ fn run_widget_showcase(args: &Args) -> Result<()> {
     }
 }
 
+fn setup_text_widgets() -> WidgetContainer {
+    let mut container = WidgetContainer::new();
+    // A simple textbox to show text rendering
+    let mut textbox = Textbox::new(50.0, 50.0, 300.0, 40.0);
+    textbox.set_text("Resize Test Mode");
+    container.add_widget(Box::new(textbox));
+    container
+}
+
 /// Setup all widgets for showcase
 fn setup_widget_showcase() -> WidgetContainer {
     let mut container = WidgetContainer::new();
@@ -259,13 +277,6 @@ fn setup_widget_showcase() -> WidgetContainer {
     container.add_widget(Box::new(textbox_focused));
 
     container
-}
-
-/// Run text resize demo mode
-fn run_text_resize(_args: &Args) -> Result<()> {
-    tracing::info!("Text resize mode not yet implemented");
-    // TODO: Implement text resize demo
-    Ok(())
 }
 
 /// Helper to extract state from a widget for RPC

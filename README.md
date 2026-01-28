@@ -23,10 +23,11 @@ A metal-down VST3/CLAP audio plugin built with Rust and Vulkan.
 
 ```bash
 # Build all workspace crates
-cargo build --workspace
+cargo build
 
 # Run tests (5 tests passing)
-cargo test --workspace
+cargo test
+# (On golden test failure, follow the printed `cp` command to update golden images)
 
 # Build and bundle the plugin (with shader compilation)
 cargo run --package xtask -- bundle
@@ -35,11 +36,7 @@ cargo run --package xtask -- bundle
 cargo run --bin standalone
 
 # Run standalone in headless mode
-# Run standalone in headless mode
 cargo run --bin standalone -- --headless
-
-# Generate golden images for visual regression testing
-cargo run --package xtask -- goldens
 
 # Run code coverage analysis
 cargo run --package xtask -- coverage

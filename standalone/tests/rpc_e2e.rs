@@ -16,6 +16,7 @@ impl StandaloneProcess {
 
         let child = Command::new(cargo_bin)
             .arg("--headless")
+            .arg("--debug-server")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()) // Capture stderr too
             .spawn()
