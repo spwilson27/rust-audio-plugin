@@ -103,14 +103,19 @@ impl Widget for Slider {
             WidgetEvent::MouseDown { x, y, .. } => {
                 self.dragging = true;
                 if self.update_value_from_position(*x, *y) {
-                    EventResult::ValueChanged(self.value)
+                    // Capture mouse and report value changed
+                    EventResult::CaptureMouse
                 } else {
-                    EventResult::Handled
+                    EventResult::CaptureMouse
                 }
             }
             WidgetEvent::MouseUp { .. } => {
-                self.dragging = false;
-                EventResult::Handled
+                if self.dragging {
+                    self.dragging = false;
+                    EventResult::Handled
+                } else {
+                    EventResult::NotHandled
+                }
             }
             WidgetEvent::MouseMove { x, y } => {
                 if self.dragging {
@@ -340,13 +345,9 @@ mod tests {
             button: 0,
         });
 
-        match result {
-            EventResult::ValueChanged(val) => {
-                assert!((val - 0.75).abs() < 0.01);
-                assert_eq!(slider.value(), val);
-            }
-            _ => panic!("Expected ValueChanged"),
-        }
+        // Should capture mouse and update value
+        assert!(matches!(result, EventResult::CaptureMouse));
+        assert!((slider.value() - 0.75).abs() < 0.01);
 
         // Drag to 25%
         let result = slider.handle_event(&WidgetEvent::MouseMove { x: 25.0, y: 15.0 });
@@ -363,19 +364,16 @@ mod tests {
     fn test_vertical_slider_drag() {
         let mut slider = Slider::new_vertical(0.0, 0.0, 30.0, 100.0);
 
-        // Click at top (which should be value 1.0)
+        // Click at middle (50%)
         let result = slider.handle_event(&WidgetEvent::MouseDown {
-            x: 15.0,
-            y: 0.0,
+            x: 15.0, // Centered on 30 width
+            y: 50.0,
             button: 0,
         });
 
-        match result {
-            EventResult::ValueChanged(val) => {
-                assert!((val - 1.0).abs() < 0.01);
-            }
-            _ => panic!("Expected ValueChanged"),
-        }
+        // Should capture mouse and update value
+        assert!(matches!(result, EventResult::CaptureMouse));
+        assert!((slider.value() - 0.5).abs() < 0.01);
 
         // Click at bottom (which should be value 0.0)
         let result = slider.handle_event(&WidgetEvent::MouseDown {
@@ -384,12 +382,8 @@ mod tests {
             button: 0,
         });
 
-        match result {
-            EventResult::ValueChanged(val) => {
-                assert!((val - 0.0).abs() < 0.01);
-            }
-            _ => panic!("Expected ValueChanged"),
-        }
+        assert!(matches!(result, EventResult::CaptureMouse));
+        assert!((slider.value() - 0.0).abs() < 0.01);
     }
 
     #[test]

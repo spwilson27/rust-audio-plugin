@@ -26,8 +26,8 @@
   - [x] Integrate layout system for widget positioning
 - [x] Integrate with `GuiContext`
   - [x] Add `WidgetContainer` field to `GuiContext`
-  - [ ] Update `handle_event()` to route to container
-  - [ ] Update `render()` to render widgets with layout
+  - [x] Update `handle_event()` to route to container
+  - [x] Update `render()` to render widgets with layout
 - [x] Write unit tests
   - [x] Test hit testing logic
   - [x] Test focus navigation
@@ -52,17 +52,17 @@
   - [x] Implement keyboard fine-tuning (arrow keys)
   - [x] Implement rendering (track + thumb)
   - [x] Write unit tests
-- [ ] Extend RPC for testing
-  - [ ] Modify `debug_control.proto` to add GetWidgetState (uses WidgetId)
-  - [ ] Add SetWidgetValue RPC method
-  - [ ] Implement GetWidgetState in `debug-server`
-  - [ ] Add widget state message types (ButtonState, SliderState, etc.)
-- [ ] Write integration tests
-  - [ ] Test button click via RPC (lookup by ID)
-  - [ ] Test slider drag via RPC
-  - [ ] Test keyboard navigation
-  - [ ] Test widgets in different layouts (Grid, Flex)
-  - [ ] Add golden image tests
+- [x] Extend RPC for testing
+  - [x] Modify `debug_control.proto` to add GetWidgetState (uses WidgetId)
+  - [x] Add SetWidgetValue RPC method
+  - [x] Implement GetWidgetState in `debug-server`
+  - [x] Add widget state message types (ButtonState, SliderState, etc.)
+- [x] Write integration tests
+  - [x] Test button click via RPC (lookup by ID)
+  - [x] Test slider drag via RPC
+  - [x] Test keyboard navigation
+  - [x] Test widgets in different layouts (Grid, Flex)
+  - [x] Add golden image tests
 
 ## Phase 3: Complex Widgets
 - [ ] Enhance text rendering
@@ -96,11 +96,11 @@
 
   - [x] Implement platform-specific clipboard access
   - [x] Add tests for copy/paste
-- [ ] Write integration tests
-  - [ ] Test knob rotation via RPC
-  - [ ] Test textbox typing via RPC
-  - [ ] Test text selection and editing
-  - [ ] Add golden image tests
+- [x] Write integration tests
+  - [x] Test knob rotation via RPC
+  - [x] Test textbox typing via RPC
+  - [x] Test text selection and editing
+  - [x] Add golden image tests
 
 ## Phase 4: Polish & Testing
 - [x] Create demo example
@@ -115,17 +115,17 @@
   - [x] Add ListWidgets RPC method
   - [x] Add widget state message types (ButtonState, SliderState, KnobState, TextboxState)
   - [x] Implement stub RPC handlers in `debug-server`
-- [ ] Implement full widget RPC integration
-  - [ ] Add GuiContext to DebugControlImpl for widget access
-  - [ ] Implement GetWidgetState to query actual widget data
-  - [ ] Implement SetWidgetValue to programmatically control widgets
-  - [ ] Write integration tests using RPC client
+- [x] Implement full widget RPC integration
+  - [x] Add GuiContext to DebugControlImpl for widget access
+  - [x] Implement GetWidgetState to query actual widget data
+  - [x] Implement SetWidgetValue to programmatically control widgets
+  - [x] Write integration tests using RPC client
 - [ ] Visual polish
   - [ ] Define hardcoded color palette (background, text, accent, etc.)
   - [ ] Add focus indicators (outline/glow)
   - [ ] Apply consistent color scheme to all widgets
   - [ ] Add hover feedback for all interactive elements
-  - [ ] Test at different DPI scales
+  - [x] Test at different DPI scales
 - [ ] Create demo example
   - [ ] Create `gui/examples/widget_demo.rs`
   - [ ] Demonstrate ManualLayout with custom positioning
@@ -133,12 +133,12 @@
   - [ ] Demonstrate FlexLayout for responsive design
   - [ ] Wire up callbacks to log interactions
   - [ ] Add instructions for keyboard navigation
-- [ ] Complete test suite
-  - [ ] Run all unit tests and fix failures
-  - [ ] Run all integration tests and fix failures
-  - [ ] Run golden image tests and update images
-  - [ ] Test focus navigation edge cases
-  - [ ] Performance profiling (ensure 60 FPS)
+- [x] Complete test suite
+  - [x] Run all unit tests and fix failures
+  - [x] Run all integration tests and fix failures
+  - [x] Run golden image tests and update images
+  - [x] Test focus navigation edge cases
+  - [x] Performance profiling (ensure 60 FPS)
 - [ ] Documentation
   - [ ] Document Widget trait API
   - [ ] Document each widget's public interface

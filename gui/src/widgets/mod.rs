@@ -110,6 +110,12 @@ pub enum EventResult {
     /// Event was handled and the widget's value changed
     /// The f64 is the new normalized value [0.0, 1.0]
     ValueChanged(f64),
+
+    /// Widget requests mouse capture (all mouse events go to this widget until release)
+    CaptureMouse,
+
+    /// Widget releases mouse capture
+    ReleaseMouse,
 }
 
 /// Rectangular bounds in screen space (pixels)

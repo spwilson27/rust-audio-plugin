@@ -250,3 +250,197 @@ async fn test_interactive_slider() {
 
     child.kill();
 }
+
+#[tokio::test]
+async fn test_drag_capture() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let root_dir = manifest_dir.parent().unwrap();
+
+    // Start binary
+    let mut child = ProcessGuard::spawn(
+        root_dir.join("target/debug/test-e2e").to_str().unwrap(),
+        &["--mode", "widgets", "--fixed-fps"],
+    )
+    .expect("Failed to start test-e2e");
+
+    // Connect to RPC (reusing logic from above would be better but keeping it simple)
+    let pid = child.id();
+    let temp_dir = std::env::temp_dir();
+    let lockfile_path = temp_dir.join(format!("test_e2e_pid_{}.json", pid));
+
+    // Wait for start...
+    let mut port = 0;
+    for _ in 0..100 {
+        if lockfile_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&lockfile_path) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(p) = json.get("port").and_then(|v| v.as_u64()) {
+                        port = p as u16;
+                        break;
+                    }
+                }
+            }
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    assert!(port > 0, "Failed to find RPC port");
+
+    let addr = format!("http://127.0.0.1:{}", port);
+    let mut client = DebugControlClient::connect(addr)
+        .await
+        .expect("Failed to connect");
+
+    // Test Slider Drag Capture
+    // Slider 3 (Horizontal) is at roughly 50, 120, size 250x30
+    // We will click in the middle, then drag WAY down (outside widget)
+    // The value should still update
+
+    println!("--- TEST 3: Slider Drag Capture ---");
+    let slider_id = 3;
+
+    // 1. Mouse Down in middle of slider (approx 175, 135)
+    client
+        .send_input_event(debug_server::debug_control::InputEventMsg {
+            event: Some(debug_server::debug_control::input_event_msg::Event::Mouse(
+                debug_server::debug_control::MouseMsg {
+                    r#type: debug_server::debug_control::mouse_msg::Type::Down as i32,
+                    x: 175.0,
+                    y: 135.0,
+                    button: 0,
+                },
+            )),
+        })
+        .await
+        .unwrap();
+
+    // 2. Drag to the right AND down (outside bounds)
+    // Slider is y=120..150. We'll drag to y=300
+    // x movement should still change value
+    for i in 0..10 {
+        client
+            .send_input_event(debug_server::debug_control::InputEventMsg {
+                event: Some(debug_server::debug_control::input_event_msg::Event::Mouse(
+                    debug_server::debug_control::MouseMsg {
+                        r#type: debug_server::debug_control::mouse_msg::Type::Move as i32,
+                        x: 175.0 + (i as f32 * 10.0), // Move right
+                        y: 135.0 + (i as f32 * 20.0), // Move down (OUTSIDE)
+                        button: 0,
+                    },
+                )),
+            })
+            .await
+            .unwrap();
+        sleep(Duration::from_millis(10)).await;
+    }
+
+    // Check value - it should have increased significantly
+    let state = client
+        .get_widget_state(debug_server::debug_control::WidgetIdMsg {
+            widget_id: slider_id,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    if let Some(debug_server::debug_control::widget_state::SpecificState::Slider(s)) =
+        state.specific_state
+    {
+        println!("Final slider value: {}", s.value);
+        assert!(
+            s.value > 0.6,
+            "Slider value should increase despite mouse being outside bounds. Got {}",
+            s.value
+        );
+    } else {
+        panic!("Expected slider state");
+    }
+
+    // Release mouse from slider
+    client
+        .send_input_event(debug_server::debug_control::InputEventMsg {
+            event: Some(debug_server::debug_control::input_event_msg::Event::Mouse(
+                debug_server::debug_control::MouseMsg {
+                    r#type: debug_server::debug_control::mouse_msg::Type::Up as i32,
+                    x: 275.0,
+                    y: 335.0,
+                    button: 0,
+                },
+            )),
+        })
+        .await
+        .unwrap();
+
+    // --- TEST 4: Knob Drag Capture ---
+    println!("--- TEST 4: Knob Drag Capture ---");
+    let knob_id = 5; // Knob 1 center approx (90, 295)
+    let center_x = 90.0;
+    let center_y = 295.0;
+
+    // 1. Mouse Down on Knob
+    client
+        .send_input_event(debug_server::debug_control::InputEventMsg {
+            event: Some(debug_server::debug_control::input_event_msg::Event::Mouse(
+                debug_server::debug_control::MouseMsg {
+                    r#type: debug_server::debug_control::mouse_msg::Type::Down as i32,
+                    x: center_x,
+                    y: center_y,
+                    button: 0,
+                },
+            )),
+        })
+        .await
+        .unwrap();
+
+    // 2. Drag Up and Left (outside bounds)
+    // Knob is y=280..310. We'll drag to y=200 (up = increase value)
+    for i in 0..10 {
+        client
+            .send_input_event(debug_server::debug_control::InputEventMsg {
+                event: Some(debug_server::debug_control::input_event_msg::Event::Mouse(
+                    debug_server::debug_control::MouseMsg {
+                        r#type: debug_server::debug_control::mouse_msg::Type::Move as i32,
+                        // Use f32 for proto compatibility
+                        x: center_x - (i as f32 * 5.0),  // Move left
+                        y: center_y - (i as f32 * 10.0), // Move Up (OUTSIDE)
+                        button: 0,
+                    },
+                )),
+            })
+            .await
+            .unwrap();
+        sleep(Duration::from_millis(10)).await;
+    }
+
+    // Check value
+    let state = client
+        .get_widget_state(debug_server::debug_control::WidgetIdMsg {
+            widget_id: knob_id as u64,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    if let Some(debug_server::debug_control::widget_state::SpecificState::Knob(k)) =
+        state.specific_state
+    {
+        println!("Final knob value: {}", k.value);
+        assert!(
+            k.value > 0.4,
+            "Knob value should increase (drag up). Got {}",
+            k.value
+        );
+    } else {
+        panic!("Expected knob state");
+    }
+
+    // Clean exit
+    let _ = client
+        .send_input_event(debug_server::debug_control::InputEventMsg {
+            event: Some(debug_server::debug_control::input_event_msg::Event::Quit(
+                debug_server::debug_control::QuitMsg {},
+            )),
+        })
+        .await;
+
+    child.kill();
+}

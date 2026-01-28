@@ -20,6 +20,7 @@ pub struct WidgetContainer {
     widget_map: HashMap<WidgetId, usize>, // ID -> index mapping
     focused_index: Option<usize>,
     hovered_index: Option<usize>,
+    captured_index: Option<usize>, // Widget that has captured the mouse
     layout: Option<Box<dyn Layout>>,
     last_mouse_pos: (f64, f64),
 }
@@ -32,6 +33,7 @@ impl WidgetContainer {
             widget_map: HashMap::new(),
             focused_index: None,
             hovered_index: None,
+            captured_index: None,
             layout: None,
             last_mouse_pos: (0.0, 0.0),
         }
@@ -134,6 +136,12 @@ impl WidgetContainer {
             let event = WidgetEvent::MouseDown { x, y, button };
             if let Some(widget) = self.widgets.get_mut(widget_index) {
                 let result = widget.handle_event(&event);
+
+                // Check if widget wants to capture mouse
+                if matches!(result, EventResult::CaptureMouse) {
+                    self.captured_index = Some(widget_index);
+                }
+
                 if !matches!(result, EventResult::NotHandled) {
                     results.push(result);
                 }
@@ -149,8 +157,10 @@ impl WidgetContainer {
     fn handle_mouse_up(&mut self, x: f64, y: f64, button: u32) -> Vec<EventResult> {
         let mut results = Vec::new();
 
-        // Send to hovered widget (if any)
-        if let Some(widget_index) = self.hovered_index {
+        // Send to captured widget first (if any), otherwise to hovered widget
+        let target_index = self.captured_index.or(self.hovered_index);
+
+        if let Some(widget_index) = target_index {
             let event = WidgetEvent::MouseUp { x, y, button };
             if let Some(widget) = self.widgets.get_mut(widget_index) {
                 let result = widget.handle_event(&event);
@@ -160,11 +170,28 @@ impl WidgetContainer {
             }
         }
 
+        // Always release capture on mouse up
+        self.captured_index = None;
+
         results
     }
 
     fn handle_mouse_move(&mut self, x: f64, y: f64) -> Vec<EventResult> {
         let mut results = Vec::new();
+
+        // PRIORITY 1: If a widget has captured the mouse, send all events to it
+        if let Some(captured_index) = self.captured_index {
+            let event = WidgetEvent::MouseMove { x, y };
+            if let Some(widget) = self.widgets.get_mut(captured_index) {
+                let result = widget.handle_event(&event);
+                if !matches!(result, EventResult::NotHandled) {
+                    results.push(result);
+                }
+            }
+            return results; // Don't update hover state while captured
+        }
+
+        // PRIORITY 2: Normal hover tracking
         let new_hovered = self.hit_test(x, y);
 
         // Handle hover state changes
@@ -384,6 +411,7 @@ mod tests {
         bounds: Rect,
         focused: bool,
         can_focus: bool,
+        requests_capture: bool,
         events_received: Vec<String>,
     }
 
@@ -394,12 +422,18 @@ mod tests {
                 bounds: Rect::new(x, y, width, height),
                 focused: false,
                 can_focus: true,
+                requests_capture: false,
                 events_received: Vec::new(),
             }
         }
 
         fn non_focusable(mut self) -> Self {
             self.can_focus = false;
+            self
+        }
+
+        fn with_capture(mut self) -> Self {
+            self.requests_capture = true;
             self
         }
     }
@@ -419,7 +453,11 @@ mod tests {
 
         fn handle_event(&mut self, event: &WidgetEvent) -> EventResult {
             self.events_received.push(format!("{:?}", event));
-            EventResult::Handled
+            if self.requests_capture && matches!(event, WidgetEvent::MouseDown { .. }) {
+                EventResult::CaptureMouse
+            } else {
+                EventResult::Handled
+            }
         }
 
         fn render(
@@ -554,5 +592,69 @@ mod tests {
         // Move mouse out
         container.handle_ui_event(UIEvent::MouseMove { x: 200.0, y: 200.0 });
         assert_eq!(container.hovered_index, None);
+    }
+
+    #[test]
+    fn test_mouse_capture() {
+        let mut container = WidgetContainer::new();
+        // Widget 0: Standard, no capture
+        container.add_widget(Box::new(MockWidget::new(10.0, 10.0, 50.0, 50.0)));
+        // Widget 1: Requests capture on MouseDown
+        container.add_widget(Box::new(
+            MockWidget::new(100.0, 100.0, 50.0, 50.0).with_capture(),
+        ));
+
+        // 1. Hover over capture widget
+        container.handle_ui_event(UIEvent::MouseMove { x: 120.0, y: 120.0 });
+        assert_eq!(container.hovered_index, Some(1));
+
+        // 2. Click capture widget (MouseDown)
+        container.handle_ui_event(UIEvent::MouseDown {
+            x: 120.0,
+            y: 120.0,
+            button: 0,
+        });
+        // Should capture
+        assert_eq!(container.captured_index, Some(1));
+
+        // 3. Move mouse outside widget
+        // Even though it's over widget 0 (30,30), widget 1 should still receive the event
+        // and hover state should NOT update to widget 0 because of capture
+        container.handle_ui_event(UIEvent::MouseMove { x: 30.0, y: 30.0 });
+
+        // Assert capture is still held
+        assert_eq!(container.captured_index, Some(1));
+
+        // Verify widget 1 received the Move event
+        let widget = container.widgets[1]
+            .as_any()
+            .downcast_ref::<MockWidget>()
+            .unwrap();
+        let last_event = widget.events_received.last().unwrap();
+        assert!(
+            last_event.contains("MouseMove"),
+            "Captured widget should receive MouseMove"
+        );
+        assert!(
+            last_event.contains("x: 30.0"),
+            "Coordinate should match event"
+        );
+
+        assert_eq!(
+            container.hovered_index,
+            Some(1),
+            "Hover index should not change during capture"
+        );
+
+        // 4. Release mouse
+        container.handle_ui_event(UIEvent::MouseUp {
+            x: 30.0,
+            y: 30.0,
+            button: 0,
+        });
+        assert_eq!(
+            container.captured_index, None,
+            "Capture should be released on MouseUp"
+        );
     }
 }

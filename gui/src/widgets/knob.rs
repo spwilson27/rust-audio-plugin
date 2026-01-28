@@ -108,11 +108,15 @@ impl Widget for Knob {
                 self.dragging = true;
                 self.drag_start_y = *y;
                 self.drag_start_value = self.value;
-                EventResult::Handled
+                EventResult::CaptureMouse
             }
             WidgetEvent::MouseUp { .. } => {
-                self.dragging = false;
-                EventResult::Handled
+                if self.dragging {
+                    self.dragging = false;
+                    EventResult::Handled
+                } else {
+                    EventResult::NotHandled
+                }
             }
             WidgetEvent::MouseMove { y, .. } => {
                 if self.dragging {
