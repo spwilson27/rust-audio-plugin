@@ -5,12 +5,15 @@
 //! - Event handling (mouse, keyboard, focus)
 //! - Rendering via Vulkan
 //! - Layout management
-//! - Automated testing via RPC event injection
-
+//! - Automated testing via RPC event
+pub mod button;
 pub mod container;
 pub mod layout;
+pub mod slider;
 pub mod widget_id;
 
+pub use button::Button;
+pub use slider::Slider;
 pub use widget_id::WidgetId;
 
 use super::vulkan::shape_renderer::ShapeRenderer;

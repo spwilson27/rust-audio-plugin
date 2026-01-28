@@ -82,7 +82,13 @@ pub struct GuiContext {
 
     #[cfg(target_os = "windows")]
     window: pal::Win32Window,
-    // TODO: Phase 3 - Add render context
+
+    /// Widget container for managing UI widgets
+    widgets: widgets::container::WidgetContainer,
+
+    /// Current window size (for layout calculations)
+    width: u32,
+    height: u32,
 }
 
 impl GuiContext {
@@ -93,19 +99,29 @@ impl GuiContext {
     ///
     /// The `parent` pointer must be a valid raw window handle for the target platform
     /// (NSView* on macOS, HWND on Windows) and must remain valid for the lifetime of the GUI.
-    pub unsafe fn attach(parent: *mut std::ffi::c_void, _width: u32, _height: u32) -> Result<Self> {
+    pub unsafe fn attach(parent: *mut std::ffi::c_void, width: u32, height: u32) -> Result<Self> {
         #[cfg(target_os = "macos")]
         {
             use pal::NativeWindow;
             let window = pal::MacOSWindow::attach(parent)?;
-            Ok(GuiContext { window })
+            Ok(GuiContext {
+                window,
+                widgets: widgets::container::WidgetContainer::new(),
+                width,
+                height,
+            })
         }
 
         #[cfg(target_os = "windows")]
         {
             use pal::NativeWindow;
             let window = pal::Win32Window::attach(parent)?;
-            Ok(GuiContext { window })
+            Ok(GuiContext {
+                window,
+                widgets: widgets::container::WidgetContainer::new(),
+                width,
+                height,
+            })
         }
 
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -127,15 +143,77 @@ impl GuiContext {
         // 3. Use same PAL code via attach()
     }
 
-    /// Process a UI event
-    pub fn handle_event(&mut self, _event: UIEvent) -> Result<()> {
-        // TODO: Phase 2.5 - Route events to appropriate handlers
-        Ok(())
+    /// Get mutable access to the widget container
+    ///
+    /// Use this to add widgets, set layouts, etc.
+    pub fn widgets_mut(&mut self) -> &mut widgets::container::WidgetContainer {
+        &mut self.widgets
     }
 
-    /// Render a frame
+    /// Get the widget container
+    pub fn widgets(&self) -> &widgets::container::WidgetContainer {
+        &self.widgets
+    }
+
+    /// Process a UI event
+    ///
+    /// This routes events to the widget container, which handles hit testing,
+    /// focus management, and event dispatch to individual widgets.
+    pub fn handle_event(&mut self, event: UIEvent) -> Result<Vec<widgets::EventResult>> {
+        // Convert our UIEvent to pal::UIEvent for the widget container
+        let pal_event = match event {
+            UIEvent::MouseDown { x, y, button } => {
+                let button_id = match button {
+                    MouseButton::Left => 0,
+                    MouseButton::Right => 1,
+                    MouseButton::Middle => 2,
+                };
+                pal::UIEvent::MouseDown {
+                    x,
+                    y,
+                    button: button_id,
+                }
+            }
+            UIEvent::MouseUp { x, y, button } => {
+                let button_id = match button {
+                    MouseButton::Left => 0,
+                    MouseButton::Right => 1,
+                    MouseButton::Middle => 2,
+                };
+                pal::UIEvent::MouseUp {
+                    x,
+                    y,
+                    button: button_id,
+                }
+            }
+            UIEvent::MouseMove { x, y } => pal::UIEvent::MouseMove { x, y },
+            UIEvent::KeyDown { .. } => {
+                // TODO: Map Key enum to keycode properly
+                pal::UIEvent::KeyDown { keycode: 0 }
+            }
+            UIEvent::KeyUp { .. } => {
+                // TODO: Map Key enum to keycode properly
+                pal::UIEvent::KeyUp { keycode: 0 }
+            }
+            UIEvent::Resize { width, height } => {
+                self.width = width;
+                self.height = height;
+                // Apply layout when window resizes
+                self.widgets.apply_layout(width as f32, height as f32);
+                return Ok(Vec::new());
+            }
+        };
+
+        Ok(self.widgets.handle_ui_event(pal_event))
+    }
+
+    /// Render the UI
+    ///
+    /// This should be called from the render loop to draw all widgets.
+    /// Note: Currently a no-op until we integrate with the Renderer.
     pub fn render(&mut self) -> Result<()> {
-        // TODO: Phase 3 - Vulkan rendering
+        // TODO: Integrate with Renderer to actually draw widgets
+        // For now, this is a placeholder
         Ok(())
     }
 
