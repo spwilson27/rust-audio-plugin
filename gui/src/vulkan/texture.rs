@@ -214,6 +214,35 @@ pub fn copy_buffer_to_image(
     Ok(())
 }
 
+/// Clear an image to a specific color.
+///
+/// Uses a single-time command buffer.
+pub fn clear_image(
+    device: &ash::Device,
+    command_pool: vk::CommandPool,
+    graphics_queue: vk::Queue,
+    image: vk::Image,
+    layout: vk::ImageLayout,
+    color: vk::ClearColorValue,
+) -> Result<()> {
+    let command_buffer = begin_single_time_commands(device, command_pool)?;
+
+    let subresource_range = vk::ImageSubresourceRange::default()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .base_mip_level(0)
+        .level_count(1)
+        .base_array_layer(0)
+        .layer_count(1);
+
+    unsafe {
+        device.cmd_clear_color_image(command_buffer, image, layout, &color, &[subresource_range]);
+    }
+
+    end_single_time_commands(device, command_pool, graphics_queue, command_buffer)?;
+
+    Ok(())
+}
+
 fn begin_single_time_commands(
     device: &ash::Device,
     command_pool: vk::CommandPool,

@@ -84,13 +84,37 @@ impl FontAtlas {
         let view = texture::create_image_view(device, image, vk::Format::R8_UNORM)?;
         let sampler = texture::create_sampler(device)?;
 
-        // Transition layout to SHADER_READ_ONLY_OPTIMAL initially
+        // Initialize texture with transparent black to prevent garbage artifacts
+        // 1. Transition to TRANSFER_DST
         texture::transition_image_layout(
             device,
             command_pool,
             graphics_queue,
             image,
             vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        )?;
+
+        // 2. Clear to transparent
+        let clear_color = vk::ClearColorValue {
+            float32: [0.0, 0.0, 0.0, 0.0],
+        };
+        texture::clear_image(
+            device,
+            command_pool,
+            graphics_queue,
+            image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            clear_color,
+        )?;
+
+        // 3. Transition to SHADER_READ
+        texture::transition_image_layout(
+            device,
+            command_pool,
+            graphics_queue,
+            image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         )?;
 
