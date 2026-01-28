@@ -27,6 +27,9 @@ use anyhow::Result;
 // Vulkan rendering backend
 pub mod fonts;
 mod vulkan;
+
+// Widget framework
+pub mod widgets;
 pub use vulkan::{Renderer, VulkanContext};
 
 /// UI Event types for input handling
