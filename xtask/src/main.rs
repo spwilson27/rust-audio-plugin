@@ -104,7 +104,7 @@ fn test(docker: bool, package: Option<String>) -> Result<()> {
         let pwd_str = pwd.to_str().context("Invalid path")?;
 
         // Construct the cargo test command to run inside docker
-        let mut test_cmd = String::from("cargo test");
+        let mut test_cmd = String::from("cargo test --no-fail-fast");
         if let Some(pkg) = package {
             test_cmd.push_str(&format!(" -p {}", pkg));
         } else {
@@ -113,9 +113,14 @@ fn test(docker: bool, package: Option<String>) -> Result<()> {
 
         // Wrap in Xvfb and shell
         let bash_cmd = format!(
-            "Xvfb :99 -screen 0 1024x768x24 & sleep 2 && DISPLAY=:99 vulkaninfo --summary && {}",
+            "Xvfb :99 -screen 0 1024x768x24 & sleep 5 && DISPLAY=:99 vulkaninfo --summary && {}",
             test_cmd
         );
+
+        // Create a temporary directory on host for golden updates
+        let temp_dir = std::env::temp_dir().join(format!("splug_goldens_{}", std::process::id()));
+        std::fs::create_dir_all(&temp_dir).context("Failed to create golden update temp dir")?;
+        let temp_dir_str = temp_dir.to_str().context("Invalid temp path")?;
 
         let status = Command::new("docker")
             .args([
@@ -123,6 +128,10 @@ fn test(docker: bool, package: Option<String>) -> Result<()> {
                 "--rm",
                 "-v",
                 &format!("{}:/app", pwd_str),
+                "-v",
+                &format!("{}:/app/target/golden_updates", temp_dir_str),
+                "-e",
+                &format!("SPLUG_GOLDEN_HOST_PATH={}", temp_dir_str),
                 "-w",
                 "/app",
                 "rust-vst-test",

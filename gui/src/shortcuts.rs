@@ -12,13 +12,13 @@ pub enum StandardAction {
 
 #[cfg(target_os = "macos")]
 pub fn match_shortcut(modifiers: Modifiers, keycode: u32) -> Option<StandardAction> {
-    // macOS Keycodes (approximate, need to verify against Carbon/HIToolbox or empirical)
+    // macOS Keycodes
     // 0: A
-    // 6: Z
     // 7: X
     // 8: C
     // 9: V
     // 51: Backspace
+    // 117: Delete
 
     // Command + C
     if modifiers.contains(Modifiers::META) && keycode == 8 {
@@ -38,13 +38,11 @@ pub fn match_shortcut(modifiers: Modifiers, keycode: u32) -> Option<StandardActi
     }
 
     // Option + Backspace (Delete Word)
-    // 51 is commonly Delete/Backspace
     if modifiers.contains(Modifiers::ALT) && keycode == 51 {
         return Some(StandardAction::DeleteWord);
     }
 
     // Option + Forward Delete (Delete Word Forward)
-    // 117 is Forward Delete
     if modifiers.contains(Modifiers::ALT) && keycode == 117 {
         return Some(StandardAction::DeleteWordForward);
     }
@@ -54,16 +52,50 @@ pub fn match_shortcut(modifiers: Modifiers, keycode: u32) -> Option<StandardActi
 
 #[cfg(not(target_os = "macos"))]
 pub fn match_shortcut(modifiers: Modifiers, keycode: u32) -> Option<StandardAction> {
-    // Windows/Linux Keycodes (Standard Scancodes usually)
-    // Assuming keycode comes from PAL which maps native.
-    // If PAL passes raw native codes, this is hard.
-    // Ideally PAL should normalize keycodes or passing char.
-    // For now, let's assume raw scan codes similar to layout.
+    // Windows/Linux Shortcuts (Ctrl-based)
+    // Keycodes vary by platform, but for E2E tests we may see macOS codes injected.
 
-    // Ctrl + C
-    if modifiers.contains(Modifiers::CTRL) && (keycode == 67 || keycode == 0x2E/* C */) {
+    // Copy: Ctrl+C (67) or Mac-injected Cmd+C (8)
+    if (modifiers.contains(Modifiers::CTRL) && keycode == 67)
+        || (modifiers.contains(Modifiers::META) && keycode == 8)
+    {
         return Some(StandardAction::Copy);
     }
-    // ... Stub for now as we are on Mac
+
+    // Paste: Ctrl+V (86) or Mac-injected Cmd+V (9)
+    if (modifiers.contains(Modifiers::CTRL) && keycode == 86)
+        || (modifiers.contains(Modifiers::META) && keycode == 9)
+    {
+        return Some(StandardAction::Paste);
+    }
+
+    // Cut: Ctrl+X (88) or Mac-injected Cmd+X (7)
+    if (modifiers.contains(Modifiers::CTRL) && keycode == 88)
+        || (modifiers.contains(Modifiers::META) && keycode == 7)
+    {
+        return Some(StandardAction::Cut);
+    }
+
+    // Select All: Ctrl+A (65) or Mac-injected Cmd+A (0)
+    if (modifiers.contains(Modifiers::CTRL) && keycode == 65)
+        || (modifiers.contains(Modifiers::META) && keycode == 0)
+    {
+        return Some(StandardAction::SelectAll);
+    }
+
+    // Delete Word: Ctrl+Backspace (8) or Mac-injected Option+Backspace (Alt+51)
+    if (modifiers.contains(Modifiers::CTRL) && (keycode == 8 || keycode == 22))
+        || (modifiers.contains(Modifiers::ALT) && keycode == 51)
+    {
+        return Some(StandardAction::DeleteWord);
+    }
+
+    // Delete Word Forward: Ctrl+Delete (46) or Mac-injected Option+Delete (Alt+117)
+    if (modifiers.contains(Modifiers::CTRL) && (keycode == 46 || keycode == 127))
+        || (modifiers.contains(Modifiers::ALT) && keycode == 117)
+    {
+        return Some(StandardAction::DeleteWordForward);
+    }
+
     None
 }

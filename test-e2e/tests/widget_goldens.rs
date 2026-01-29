@@ -13,16 +13,6 @@ async fn test_widget_showcase_golden() {
     // Path to golden image
     let golden_path = manifest_dir.join("goldens/widgets_showcase.png");
 
-    // Skip if golden doesn't exist yet
-    if !golden_path.exists() {
-        println!(
-            "SKIPPING: Golden image not found at: {}",
-            golden_path.display()
-        );
-        println!("Run 'cargo xtask goldens' to generate it.");
-        return;
-    }
-
     println!("Verifying against golden: {}", golden_path.display());
 
     // Build test-e2e
