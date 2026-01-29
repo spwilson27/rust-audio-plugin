@@ -332,7 +332,7 @@ fn setup_widget_showcase() -> WidgetContainer {
 
 /// Helper to extract state from a widget for RPC
 fn extract_widget_state(
-    widget: &Box<dyn Widget>,
+    widget: &dyn Widget,
     id: u64,
 ) -> Option<debug_server::debug_control::WidgetState> {
     use debug_server::debug_control::{

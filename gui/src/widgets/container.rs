@@ -67,10 +67,11 @@ impl WidgetContainer {
     }
 
     /// Get a widget by ID
-    pub fn get_widget(&self, id: WidgetId) -> Option<&Box<dyn Widget>> {
+    pub fn get_widget(&self, id: WidgetId) -> Option<&dyn Widget> {
         self.widget_map
             .get(&id)
             .and_then(|&index| self.widgets.get(index))
+            .map(|w| w.as_ref())
     }
 
     /// Get a mutable widget by ID
@@ -81,8 +82,8 @@ impl WidgetContainer {
     }
 
     /// Get a widget by index
-    pub fn get_widget_at(&self, index: usize) -> Option<&Box<dyn Widget>> {
-        self.widgets.get(index)
+    pub fn get_widget_at(&self, index: usize) -> Option<&dyn Widget> {
+        self.widgets.get(index).map(|w| w.as_ref())
     }
 
     /// Get a mutable widget by index
