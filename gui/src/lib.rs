@@ -86,11 +86,7 @@ pub struct Modifiers {
 
 /// Main GUI context
 pub struct GuiContext {
-    #[cfg(target_os = "macos")]
-    window: pal::MacOSWindow,
-
-    #[cfg(target_os = "windows")]
-    window: pal::Win32Window,
+    window: pal::Window,
 
     /// Widget container for managing UI widgets
     widgets: widgets::container::WidgetContainer,
@@ -109,34 +105,14 @@ impl GuiContext {
     /// The `parent` pointer must be a valid raw window handle for the target platform
     /// (NSView* on macOS, HWND on Windows) and must remain valid for the lifetime of the GUI.
     pub unsafe fn attach(parent: *mut std::ffi::c_void, width: u32, height: u32) -> Result<Self> {
-        #[cfg(target_os = "macos")]
-        {
-            use pal::NativeWindow;
-            let window = pal::MacOSWindow::attach(parent)?;
-            Ok(GuiContext {
-                window,
-                widgets: widgets::container::WidgetContainer::new(),
-                width,
-                height,
-            })
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            use pal::NativeWindow;
-            let window = pal::Win32Window::attach(parent)?;
-            Ok(GuiContext {
-                window,
-                widgets: widgets::container::WidgetContainer::new(),
-                width,
-                height,
-            })
-        }
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        {
-            anyhow::bail!("Unsupported platform")
-        }
+        use pal::NativeWindow;
+        let window = pal::Window::attach(parent)?;
+        Ok(GuiContext {
+            window,
+            widgets: widgets::container::WidgetContainer::new(),
+            width,
+            height,
+        })
     }
 
     /// Create a new standalone GUI context (standalone mode)
@@ -245,13 +221,8 @@ impl GuiContext {
     }
 
     /// Get mutable access to underlying window (for setting event callbacks)
-    #[cfg(target_os = "macos")]
-    pub fn get_window_mut(&mut self) -> Option<&mut pal::MacOSWindow> {
-        Some(&mut self.window)
-    }
-
-    #[cfg(target_os = "windows")]
-    pub fn get_window_mut(&mut self) -> Option<&mut pal::Win32Window> {
+    /// Get mutable access to underlying window (for setting event callbacks)
+    pub fn get_window_mut(&mut self) -> Option<&mut pal::Window> {
         Some(&mut self.window)
     }
 }

@@ -7,10 +7,6 @@ use clap::Parser;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // Import dependencies at crate level to avoid lookup issues
-#[cfg(target_os = "macos")]
-use pal::macos::MacOSWindow;
-#[cfg(target_os = "windows")]
-use pal::win32::Win32Window;
 
 // WindowHandleWrapper to implement raw_window_handle traits for &dyn NativeWindow
 struct WindowHandleWrapper<'a>(&'a dyn pal::NativeWindow);
@@ -27,10 +23,11 @@ impl<'a> raw_window_handle::HasDisplayHandle for WindowHandleWrapper<'a> {
     fn display_handle(
         &self,
     ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
-        use raw_window_handle::{AppKitDisplayHandle, DisplayHandle, RawDisplayHandle};
-        Ok(unsafe {
-            DisplayHandle::borrow_raw(RawDisplayHandle::AppKit(AppKitDisplayHandle::new()))
-        })
+        Ok(
+            unsafe {
+                raw_window_handle::DisplayHandle::borrow_raw(self.0.get_raw_display_handle())
+            },
+        )
     }
 }
 
@@ -134,23 +131,18 @@ fn run_headless(args: &Args) -> Result<()> {
 /// Run the plugin with GUI
 /// Initializes window and rendering pipeline
 fn run_with_gui(args: &Args) -> Result<()> {
-    tracing::info!("Initializing macOS window...");
+    tracing::info!("Initializing window...");
 
     use pal::{App, NativeWindow, UIEvent}; // Import traits
 
     // 1. Initialize Application via PAL
     // Use Box<dyn> to hold the platform-specific implementation
-    #[cfg(target_os = "macos")]
-    let app: Box<dyn App> = Box::new(pal::MacOSApp::init()?);
+    let app: Box<dyn App> = Box::new(pal::AppImpl::init()?);
 
     // 2. Create the window via PAL
-    #[cfg(target_os = "macos")]
     // Safety: Passing null pointer is valid for standalone initialization
     let mut window: Box<dyn NativeWindow> =
-        Box::new(unsafe { MacOSWindow::attach(std::ptr::null_mut())? });
-
-    #[cfg(not(target_os = "macos"))]
-    let (app, mut window) = unimplemented!("Only macOS supported for now");
+        Box::new(unsafe { pal::Window::attach(std::ptr::null_mut())? });
 
     window.set_size(800, 600)?;
 

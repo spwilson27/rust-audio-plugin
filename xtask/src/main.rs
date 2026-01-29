@@ -36,6 +36,24 @@ enum Commands {
         #[arg(long)]
         verify: bool,
     },
+    /// Build the project
+    Build {
+        /// Build in release mode
+        #[arg(long)]
+        release: bool,
+        /// Build Docker image for E2E tests
+        #[arg(long)]
+        docker: bool,
+    },
+    /// Run tests
+    Test {
+        /// Run tests inside Docker container
+        #[arg(long)]
+        docker: bool,
+        /// Optional package to test
+        #[arg(short, long)]
+        package: Option<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -45,7 +63,98 @@ fn main() -> Result<()> {
         Commands::Bundle { release } => bundle(release),
         Commands::Lint => lint(),
         Commands::Coverage { verify } => coverage(verify),
+        Commands::Build { release, docker } => build(release, docker),
+        Commands::Test { docker, package } => test(docker, package),
     }
+}
+
+fn build(release: bool, docker: bool) -> Result<()> {
+    if docker {
+        println!("🐳 Building Docker image...");
+        let status = Command::new("docker")
+            .args(["build", "-t", "rust-vst-test", "."])
+            .status()
+            .context("Failed to run docker build")?;
+
+        if !status.success() {
+            bail!("Docker build failed");
+        }
+        println!("  ✓ Docker image built: rust-vst-test");
+    } else {
+        println!("🔨 Building workspace...");
+        let mut cmd = Command::new("cargo");
+        cmd.arg("build").arg("--workspace");
+        if release {
+            cmd.arg("--release");
+        }
+        let status = cmd.status().context("Failed to run cargo build")?;
+        if !status.success() {
+            bail!("Build failed");
+        }
+        println!("  ✓ Build complete");
+    }
+    Ok(())
+}
+
+fn test(docker: bool, package: Option<String>) -> Result<()> {
+    if docker {
+        println!("🐳 Running tests in Docker container...");
+
+        let pwd = std::env::current_dir()?;
+        let pwd_str = pwd.to_str().context("Invalid path")?;
+
+        // Construct the cargo test command to run inside docker
+        let mut test_cmd = String::from("cargo test");
+        if let Some(pkg) = package {
+            test_cmd.push_str(&format!(" -p {}", pkg));
+        } else {
+            test_cmd.push_str(" --workspace");
+        }
+
+        // Wrap in Xvfb and shell
+        let bash_cmd = format!(
+            "Xvfb :99 -screen 0 1024x768x24 & sleep 2 && DISPLAY=:99 vulkaninfo --summary && {}",
+            test_cmd
+        );
+
+        let status = Command::new("docker")
+            .args([
+                "run",
+                "--rm",
+                "-v",
+                &format!("{}:/app", pwd_str),
+                "-w",
+                "/app",
+                "rust-vst-test",
+                "bash",
+                "-c",
+                &bash_cmd,
+            ])
+            .status()
+            .context("Failed to run docker container")?;
+
+        if !status.success() {
+            bail!("Tests failed in Docker");
+        }
+        println!("  ✓ Tests passed (Docker)");
+    } else {
+        println!("🧪 Running tests...");
+        let mut cmd = Command::new("cargo");
+        cmd.arg("test");
+
+        if let Some(pkg) = package {
+            cmd.arg("-p").arg(pkg);
+        } else {
+            cmd.arg("--workspace");
+        }
+
+        let status = cmd.status().context("Failed to run cargo test")?;
+        if !status.success() {
+            bail!("Tests failed");
+        }
+        println!("  ✓ Tests passed");
+    }
+    Ok(())
 }
 
 /// Main bundle command - orchestrates the entire build process
@@ -288,6 +397,7 @@ fn build_rust_library(release: bool) -> Result<()> {
 }
 
 /// Create platform-specific bundle structure
+#[allow(unused_variables)]
 fn create_bundle(root: &Path, profile: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
@@ -420,6 +530,7 @@ fn generate_info_plist() -> String {
 "#.to_string()
 }
 
+#[allow(unused_variables)]
 fn print_bundle_location(root: &Path) -> Result<()> {
     #[cfg(target_os = "macos")]
     {

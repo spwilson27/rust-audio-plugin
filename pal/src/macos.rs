@@ -625,14 +625,16 @@ impl crate::NativeWindow for MacOSWindow {
     }
 
     fn get_raw_handle(&self) -> RawWindowHandle {
-        // AppKitWindowHandle::new expects a NonNull<c_void> to the NSView
-        // Deref Retained<AnyObject> to &AnyObject, then cast to pointer
-        // Retained::as_ptr is available and safer/cleaner
         let ptr = Retained::as_ptr(&self.view) as *mut c_void;
         let view_ptr = std::ptr::NonNull::new(ptr).expect("View pointer null");
 
         let handle = AppKitWindowHandle::new(view_ptr);
         RawWindowHandle::AppKit(handle)
+    }
+
+    fn get_raw_display_handle(&self) -> raw_window_handle::RawDisplayHandle {
+        let handle = raw_window_handle::AppKitDisplayHandle::new();
+        raw_window_handle::RawDisplayHandle::AppKit(handle)
     }
 
     fn set_size(&mut self, width: u32, height: u32) -> Result<()> {

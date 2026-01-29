@@ -8,9 +8,6 @@ use clap::Parser;
 use gui::widgets::container::WidgetContainer;
 use gui::widgets::{Button, Knob, Slider, Textbox, Widget};
 
-#[cfg(target_os = "macos")]
-use pal::macos::MacOSWindow;
-
 // WindowHandleWrapper for raw_window_handle traits
 struct WindowHandleWrapper<'a>(&'a dyn pal::NativeWindow);
 
@@ -26,10 +23,11 @@ impl<'a> raw_window_handle::HasDisplayHandle for WindowHandleWrapper<'a> {
     fn display_handle(
         &self,
     ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
-        use raw_window_handle::{AppKitDisplayHandle, DisplayHandle, RawDisplayHandle};
-        Ok(unsafe {
-            DisplayHandle::borrow_raw(RawDisplayHandle::AppKit(AppKitDisplayHandle::new()))
-        })
+        Ok(
+            unsafe {
+                raw_window_handle::DisplayHandle::borrow_raw(self.0.get_raw_display_handle())
+            },
+        )
     }
 }
 
@@ -75,16 +73,11 @@ fn run_app(args: &Args, mut widgets: WidgetContainer) -> Result<()> {
     use pal::{App, NativeWindow, UIEvent};
 
     // Initialize Application
-    #[cfg(target_os = "macos")]
-    let app: Box<dyn App> = Box::new(pal::MacOSApp::init()?);
+    let app: Box<dyn App> = Box::new(pal::AppImpl::init()?);
 
     // Create window
-    #[cfg(target_os = "macos")]
     let mut window: Box<dyn NativeWindow> =
-        Box::new(unsafe { MacOSWindow::attach(std::ptr::null_mut())? });
-
-    #[cfg(not(target_os = "macos"))]
-    let (app, mut window) = unimplemented!("Only macOS supported");
+        Box::new(unsafe { pal::Window::attach(std::ptr::null_mut())? });
 
     window.set_size(800, 600)?;
 

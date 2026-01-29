@@ -37,6 +37,11 @@ impl crate::NativeWindow for Win32Window {
         RawWindowHandle::Win32(handle)
     }
 
+    fn get_raw_display_handle(&self) -> raw_window_handle::RawDisplayHandle {
+        let handle = raw_window_handle::WindowsDisplayHandle::new();
+        raw_window_handle::RawDisplayHandle::Windows(handle)
+    }
+
     fn set_size(&mut self, width: u32, height: u32) -> Result<()> {
         self.width = width;
         self.height = height;

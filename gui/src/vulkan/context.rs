@@ -86,19 +86,36 @@ impl VulkanContext {
             extension_names.push(ash::khr::win32_surface::NAME.as_ptr());
         }
 
+        #[cfg(target_os = "linux")]
+        {
+            extension_names.push(ash::khr::xlib_surface::NAME.as_ptr());
+        }
+
         // Debug extensions
         if cfg!(debug_assertions) {
             extension_names.push(ash::ext::debug_utils::NAME.as_ptr());
         }
 
         // Validation layers
-        let layer_names = if cfg!(debug_assertions) {
-            vec![CString::new("VK_LAYER_KHRONOS_validation").unwrap()]
-        } else {
-            vec![]
-        };
-        let layer_name_ptrs: Vec<*const i8> = layer_names.iter().map(|s| s.as_ptr()).collect();
+        let mut layer_names = Vec::new();
+        if cfg!(debug_assertions) {
+            let supported_layers = unsafe { entry.enumerate_instance_layer_properties() }?;
+            let validation_layer = CString::new("VK_LAYER_KHRONOS_validation").unwrap();
+            let has_validation = supported_layers.iter().any(|l| {
+                let name = unsafe { CStr::from_ptr(l.layer_name.as_ptr()) };
+                name == validation_layer.as_c_str()
+            });
 
+            if has_validation {
+                layer_names.push(validation_layer);
+            } else {
+                tracing::warn!("Vulkan validation layers requested but not found");
+            }
+        }
+        let layer_name_ptrs: Vec<*const std::os::raw::c_char> =
+            layer_names.iter().map(|s| s.as_ptr() as *const _).collect();
+
+        #[allow(unused_mut)]
         let mut create_info = vk::InstanceCreateInfo::default()
             .application_info(&app_info)
             .enabled_extension_names(&extension_names)

@@ -18,7 +18,6 @@
 //! - **Windows**: Uses `windows-sys` to create child HWND with proper parenting
 
 use anyhow::Result;
-use raw_window_handle::RawWindowHandle;
 
 mod event_router;
 pub use event_router::EventRouter;
@@ -89,7 +88,10 @@ pub trait NativeWindow {
         Self: Sized;
 
     /// Get the raw window handle for Vulkan surface creation
-    fn get_raw_handle(&self) -> RawWindowHandle;
+    fn get_raw_handle(&self) -> raw_window_handle::RawWindowHandle;
+
+    /// Get the raw display handle for Vulkan surface creation
+    fn get_raw_display_handle(&self) -> raw_window_handle::RawDisplayHandle;
 
     /// Resize the window
     ///
@@ -125,11 +127,8 @@ pub mod macos;
 pub mod win32;
 
 // Re-export the platform-specific implementation
-#[cfg(target_os = "macos")]
-pub use macos::MacOSWindow;
-
-#[cfg(target_os = "windows")]
-pub use win32::Win32Window;
+#[cfg(target_os = "linux")]
+pub mod linux;
 
 /// Core trait for application lifecycle management (Standalone mode)
 pub trait App {
@@ -144,10 +143,19 @@ pub trait App {
 
 // Re-export the platform-specific implementation
 #[cfg(target_os = "macos")]
-pub use macos::MacOSApp;
+pub use macos::MacOSApp as AppImpl;
+#[cfg(target_os = "macos")]
+pub use macos::MacOSWindow as Window;
 
 #[cfg(target_os = "windows")]
-pub use win32::Win32App;
+pub use win32::Win32App as AppImpl;
+#[cfg(target_os = "windows")]
+pub use win32::Win32Window as Window;
+
+#[cfg(target_os = "linux")]
+pub use linux::LinuxApp as AppImpl;
+#[cfg(target_os = "linux")]
+pub use linux::LinuxWindow as Window;
 
 #[cfg(test)]
 mod tests {

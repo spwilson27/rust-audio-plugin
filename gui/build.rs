@@ -26,19 +26,29 @@ fn main() {
 
                 println!("cargo:rerun-if-changed={}", path.display());
 
-                // Compile using glslc
-                let status = Command::new("glslc")
+                // Try glslc first
+                let mut status = Command::new("glslc")
                     .arg(&path)
                     .arg("-o")
                     .arg(&out_path)
                     .status();
+
+                // Fallback to glslangValidator
+                if status.is_err() || !status.as_ref().unwrap().success() {
+                    status = Command::new("glslangValidator")
+                        .arg("-V")
+                        .arg(&path)
+                        .arg("-o")
+                        .arg(&out_path)
+                        .status();
+                }
 
                 if let Ok(status) = status {
                     if !status.success() {
                         println!("cargo:warning=Failed to compile shader {}", path.display());
                     }
                 } else {
-                    println!("cargo:warning=glslc not found, skipping shader compilation");
+                    println!("cargo:warning=Neither glslc nor glslangValidator found, skipping shader compilation");
                 }
             }
         }

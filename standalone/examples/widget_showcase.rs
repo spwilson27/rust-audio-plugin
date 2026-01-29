@@ -5,7 +5,7 @@
 use anyhow::{Context, Result};
 use gui::widgets::container::WidgetContainer;
 use gui::widgets::{Button, Knob, Slider, Textbox};
-use pal::{App, MacOSApp, MacOSWindow, NativeWindow, UIEvent as PalEvent};
+use pal::{App, AppImpl, NativeWindow, UIEvent as PalEvent, Window};
 use tracing::info;
 
 struct WindowHandleWrapper<'a>(&'a dyn pal::NativeWindow);
@@ -32,8 +32,8 @@ impl<'a> raw_window_handle::HasDisplayHandle for WindowHandleWrapper<'a> {
 }
 
 struct WidgetShowcaseApp {
-    app: MacOSApp,
-    window: MacOSWindow,
+    app: AppImpl,
+    window: Window,
     widgets: WidgetContainer,
     renderer: gui::Renderer,
     running: bool,
@@ -42,10 +42,10 @@ struct WidgetShowcaseApp {
 impl WidgetShowcaseApp {
     fn new() -> Result<Self> {
         // Initialize platform
-        let app = MacOSApp::init()?;
+        let app = AppImpl::init()?;
 
         // Create window (standalone mode)
-        let mut window = unsafe { MacOSWindow::attach(std::ptr::null_mut())? };
+        let mut window = unsafe { Window::attach(std::ptr::null_mut())? };
         window.set_size(800, 600)?;
 
         // Initialize Vulkan renderer
