@@ -2,7 +2,7 @@
 //!
 //! Verifies that widgets respond to input events and update their visual state.
 
-use debug_server::DebugControlClient;
+use debug_server::{DebugControlClient, Empty};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
@@ -98,6 +98,12 @@ async fn test_interactive_slider() {
         .max_encoding_message_size(16 * 1024 * 1024);
 
     println!("Connected to RPC server");
+
+    // Wait for app to be ready
+    client
+        .wait_for_app_ready(Empty {})
+        .await
+        .expect("Failed to wait for app ready");
 
     // --- TEST 1: Slider Interaction via Input Events ---
     println!("--- TEST 1: Slider Interaction ---");
@@ -281,7 +287,7 @@ async fn test_drag_capture() {
                 }
             }
         }
-        sleep(Duration::from_millis(100)).await;
+        sleep(Duration::from_millis(200)).await;
     }
     assert!(port > 0, "Failed to find RPC port");
 
@@ -289,6 +295,12 @@ async fn test_drag_capture() {
     let mut client = DebugControlClient::connect(addr)
         .await
         .expect("Failed to connect");
+
+    // Wait for app to be ready
+    client
+        .wait_for_app_ready(Empty {})
+        .await
+        .expect("Failed to wait for app ready");
 
     // Test Slider Drag Capture
     // Slider 3 (Horizontal) is at roughly 50, 120, size 250x30

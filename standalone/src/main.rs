@@ -96,7 +96,7 @@ fn run_headless(args: &Args) -> Result<()> {
         let lockfile_path = temp_dir.join(format!("splug_pid_{}.json", pid));
 
         match debug_server::RpcServer::start(0, tx) {
-            Ok(port) => {
+            Ok((port, _)) => {
                 tracing::info!("RPC Server started on port {}", port);
                 let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
                 std::fs::write(&lockfile_path, json).context("Failed to write lockfile")?;
@@ -187,7 +187,7 @@ fn run_with_gui(args: &Args) -> Result<()> {
         let lockfile_path = temp_dir.join(format!("splug_pid_{}.json", pid));
 
         match debug_server::RpcServer::start(0, tx) {
-            Ok(port) => {
+            Ok((port, _)) => {
                 tracing::info!("RPC Server started on port {}", port);
                 let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
                 if let Err(e) = std::fs::write(&lockfile_path, json) {

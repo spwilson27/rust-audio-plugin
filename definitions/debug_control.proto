@@ -5,6 +5,8 @@ service DebugControl {
     rpc SendInputEvent (InputEventMsg) returns (Ack);
     rpc ResizeWindow (ResizeMsg) returns (Ack);
     rpc CaptureScreen (Empty) returns (ImageBytes);
+    rpc WaitForAppReady (Empty) returns (Ack);
+    rpc SyncEvents (Empty) returns (Ack);
     
     // Widget testing RPCs
     rpc GetWidgetState (WidgetIdMsg) returns (WidgetState);

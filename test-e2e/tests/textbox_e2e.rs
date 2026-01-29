@@ -2,7 +2,7 @@
 //!
 //! Verifies advanced text editing features via RPC.
 
-use debug_server::DebugControlClient;
+use debug_server::{DebugControlClient, Empty};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
@@ -79,9 +79,11 @@ async fn setup_test() -> (ProcessGuard, DebugControlClient<tonic::transport::Cha
         .await
         .expect("Failed to connect to RPC server");
 
-    let client = DebugControlClient::new(channel)
+    let mut client = DebugControlClient::new(channel)
         .max_decoding_message_size(16 * 1024 * 1024)
         .max_encoding_message_size(16 * 1024 * 1024);
+
+    assert!(client.wait_for_app_ready(Empty {}).await.is_ok());
 
     (child, client)
 }
@@ -127,8 +129,8 @@ async fn test_text_entry_and_deletion() {
             })
             .await
             .unwrap();
-        sleep(Duration::from_millis(50)).await;
     }
+    client.sync_events(Empty {}).await.unwrap();
 
     // Verify text: "Focused World"
     let state_mid = client
@@ -316,6 +318,7 @@ async fn test_drag_selection_and_replace() {
             .await
             .unwrap();
     }
+    client.sync_events(Empty {}).await.unwrap();
 
     // Verify text: "NewText" or similar (depending on how much "Sample " was selected)
     // "Sample Text" -> "New" + remainder
@@ -355,9 +358,6 @@ async fn test_double_click_selection() {
     let click_x = 150.0;
     let click_y = 390.0;
 
-    // TODO We should have an RPC to wait for the server to come up
-    sleep(Duration::from_millis(200)).await; // Wait for the server to come up??
-
     // Click 1
     client
         .send_input_event(debug_server::debug_control::InputEventMsg {
@@ -387,8 +387,6 @@ async fn test_double_click_selection() {
         .await
         .unwrap();
 
-    sleep(Duration::from_millis(100)).await; // Fast enough for double click (<500ms)
-
     // Click 2
     client
         .send_input_event(debug_server::debug_control::InputEventMsg {
@@ -404,10 +402,9 @@ async fn test_double_click_selection() {
         .await
         .unwrap();
 
-    sleep(Duration::from_millis(200)).await; // Wait for event processing
+    client.sync_events(Empty {}).await.unwrap();
 
-    // State check immediate after Down?
-    // Logic sets selection on Down for double click.
+    // Verify that it becomes selected after down.
 
     let state = client
         .get_widget_state(debug_server::debug_control::WidgetIdMsg {
@@ -435,6 +432,26 @@ async fn test_double_click_selection() {
         })
         .await
         .unwrap();
+
+    client.sync_events(Empty {}).await.unwrap();
+
+    // Verify that it remains selected after up.
+
+    let state = client
+        .get_widget_state(debug_server::debug_control::WidgetIdMsg {
+            widget_id: textbox_id,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    if let Some(debug_server::debug_control::widget_state::SpecificState::Textbox(tb)) =
+        state.specific_state
+    {
+        assert!(
+            tb.has_selection,
+            "Should remain selected after double click"
+        );
+    }
 
     child.kill();
 }

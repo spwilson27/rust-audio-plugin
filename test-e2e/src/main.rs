@@ -99,28 +99,34 @@ fn run_app(args: &Args, mut widgets: WidgetContainer) -> Result<()> {
     let (tx, _rx) = crossbeam_channel::unbounded();
     window.event_router().set_event_receiver(_rx);
 
-    match debug_server::RpcServer::start(0, tx) {
-        Ok(port) => {
+    let ready_notify = match debug_server::RpcServer::start(0, tx) {
+        Ok((port, notify)) => {
             tracing::info!("RPC Server started on port {}", port);
             let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
             std::fs::write(&lockfile_path, json).context("Failed to write lockfile")?;
+            Some(notify)
         }
         Err(e) => {
             tracing::error!("Failed to start RPC server: {}", e);
+            None
         }
-    }
+    };
 
     // Event channel
     let (app_tx, app_rx) = std::sync::mpsc::channel();
     let app_tx_cb = app_tx.clone();
 
     window.event_router().set_callback(move |event| {
-        let _ = app_tx_cb.send(event);
+        let r = app_tx_cb.send(event);
+        if r.is_err() {
+            tracing::error!("Event dropped: {:?}", r);
+        }
     });
 
     tracing::info!("App loop running...");
 
     let mut _frame_count = 0;
+    let mut signaled_ready = false;
     loop {
         window.event_router().poll_events();
         app.poll_events();
@@ -190,6 +196,11 @@ fn run_app(args: &Args, mut widgets: WidgetContainer) -> Result<()> {
                         };
                         let _ = req.reply.send(success);
                     }
+                    // Handle SyncEventsRequest
+                    else if let Some(req) = data.downcast_ref::<debug_server::SyncEventsRequest>()
+                    {
+                        let _ = req.reply.send(true);
+                    }
                 }
                 // Forward all other events to widgets
                 _ => {
@@ -201,6 +212,14 @@ fn run_app(args: &Args, mut widgets: WidgetContainer) -> Result<()> {
         // Render
         if let Err(e) = renderer.draw_frame(Some(&widgets)) {
             tracing::warn!("Render error: {}", e);
+        }
+        if !signaled_ready {
+            // Signal readiness after first successful frame
+            if let Some(notify) = &ready_notify {
+                notify.notify_one();
+                tracing::info!("Signaled App Ready");
+            }
+            signaled_ready = true;
         }
 
         _frame_count += 1;

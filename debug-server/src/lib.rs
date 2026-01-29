@@ -21,15 +21,22 @@ pub struct RpcServer {}
 
 impl RpcServer {
     /// Start the RPC server on a background thread
-    /// Returns the port bound to
-    pub fn start(port: u16, event_sender: Sender<UIEvent>) -> Result<u16> {
+    /// Returns the port bound to and a Notify to signal app readiness
+    pub fn start(
+        port: u16,
+        event_sender: Sender<UIEvent>,
+    ) -> Result<(u16, Arc<tokio::sync::Notify>)> {
         let addr: SocketAddr = format!("127.0.0.1:{}", port)
             .parse()
             .context("Invalid address")?;
 
+        let ready_notify = Arc::new(tokio::sync::Notify::new());
+        let ready_notify_service = ready_notify.clone();
+
         // Create the service implementation
         let service = DebugControlImpl {
             sender: Arc::new(Mutex::new(event_sender)),
+            ready_notify: ready_notify_service,
         };
 
         // We need to know the bound port.
@@ -69,12 +76,13 @@ impl RpcServer {
             });
         });
 
-        Ok(bound_port)
+        Ok((bound_port, ready_notify))
     }
 }
 
 pub struct DebugControlImpl {
     sender: Arc<Mutex<Sender<UIEvent>>>,
+    ready_notify: Arc<tokio::sync::Notify>,
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +95,11 @@ pub struct GetWidgetStateRequest {
 pub struct SetWidgetValueRequest {
     pub id: u64,
     pub value: f64,
+    pub reply: crossbeam_channel::Sender<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SyncEventsRequest {
     pub reply: crossbeam_channel::Sender<bool>,
 }
 
@@ -244,6 +257,40 @@ impl DebugControl for DebugControlImpl {
 
         // Placeholder: Return empty list
         Ok(Response::new(debug_control::WidgetList { widgets: vec![] }))
+    }
+
+    async fn wait_for_app_ready(
+        &self,
+        _request: Request<debug_control::Empty>,
+    ) -> Result<Response<debug_control::Ack>, Status> {
+        self.ready_notify.notified().await;
+        Ok(Response::new(debug_control::Ack { success: true }))
+    }
+
+    async fn sync_events(
+        &self,
+        _request: Request<debug_control::Empty>,
+    ) -> Result<Response<debug_control::Ack>, Status> {
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
+        let req = SyncEventsRequest { reply: reply_tx };
+
+        {
+            let guard = self
+                .sender
+                .lock()
+                .map_err(|_| Status::internal("Failed to lock sender"))?;
+
+            guard
+                .send(UIEvent::Custom(std::sync::Arc::new(req)))
+                .map_err(|_| Status::internal("Failed to send sync request"))?;
+        }
+
+        // Wait for response
+        let success = reply_rx.recv().map_err(|_| {
+            Status::internal("Failed to receive sync response (main thread crashed?)")
+        })?;
+
+        Ok(Response::new(debug_control::Ack { success }))
     }
 }
 
