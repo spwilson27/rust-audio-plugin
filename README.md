@@ -63,6 +63,10 @@ Testing the GPU-accelerated UI on Linux is handled via Docker:
 -   This command builds the `rust-vst-test` image, runs a container with `Xvfb`, and executes the E2E tests.
 -   UI snapshots from failing Docker tests are automatically synchronized to your host system for easy review and golden updates.
 
+### macOS Virtualization (Tart)
+
+For isolated testing on macOS (Apple Silicon), we use **Tart**. See [docs/VM_TESTING.md](docs/VM_TESTING.md) for setup and usage instructions.
+
 ### Code Quality
 
 ```bash
