@@ -177,19 +177,20 @@ impl Widget for Knob {
         _screen_width: u32,
         _screen_height: u32,
     ) {
+        use crate::theme::colors::*;
+
         let (cx, cy) = self.center();
         let radius = self.radius();
 
         // Colors
-        let background_color = [0.15, 0.15, 0.15, 1.0];
-        let track_color = [0.25, 0.25, 0.25, 1.0];
+        let background_color = BACKGROUND_WIDGET;
+        let track_color = BACKGROUND_PRESSED; // Inner track
         let value_color = if self.hovered || self.dragging {
-            [0.4, 0.6, 0.9, 1.0] // Lighter blue when interacting
+            ACCENT_HOVER
         } else {
-            [0.3, 0.5, 0.7, 1.0] // Blue
+            ACCENT
         };
-        let indicator_color = [0.9, 0.9, 0.9, 1.0]; // White indicator line
-        let focus_color = [0.5, 0.7, 1.0, 0.5];
+        let indicator_color = TEXT_PRIMARY; // White line
 
         // Draw background circle
         shape_renderer.draw_circle(cx, cy, radius, background_color);
@@ -199,32 +200,25 @@ impl Widget for Knob {
         shape_renderer.draw_circle(cx, cy, track_radius, track_color);
 
         // TODO: Draw arc for the value range
-        // This would require adding an arc drawing method to ShapeRenderer
-        // For now, we'll just draw the indicator line
 
         // Draw value indicator line (from center to edge)
         let angle_rad = self.value_to_angle().to_radians();
-        let indicator_start = radius * 0.3;
         let indicator_end = radius * 0.8;
 
-        let x1 = cx + angle_rad.cos() * indicator_start;
-        let y1 = cy + angle_rad.sin() * indicator_start;
         let x2 = cx + angle_rad.cos() * indicator_end;
         let y2 = cy + angle_rad.sin() * indicator_end;
 
         // Draw indicator as a thin rectangle (approximating a line)
         let line_width = 2.0;
-        let _line_length = indicator_end - indicator_start;
-        let _line_cx = (x1 + x2) / 2.0;
-        let _line_cy = (y1 + y2) / 2.0;
 
         // Approximation: draw a small rect at the indicator position
-        // A proper implementation would use a line renderer or rotate the rect
         shape_renderer.draw_rect(
             x2 - line_width / 2.0,
             y2 - line_width / 2.0,
             line_width,
-            line_width * 3.0, // Make it longer
+            line_width * 3.0, // Make it longer? No, this is just a dot/rect.
+            // Previous code: line_width * 3.0.
+            // Let's stick to previous geometry but use theme color.
             indicator_color,
             1.0,
         );
@@ -237,21 +231,25 @@ impl Widget for Knob {
 
         // Draw focus indicator
         if self.focused {
-            shape_renderer.draw_circle(cx, cy, radius + 3.0, focus_color);
+            shape_renderer.draw_circle(cx, cy, radius + 3.0, BORDER_FOCUS);
         }
 
         // Draw value text below knob
         let value_text = format!("{:.0}%", self.value * 100.0);
-        let text_x = cx - 15.0; // Approximate centering
+        let text_size = 14.0;
+        let text_width = _font_atlas.measure_text(&value_text, text_size);
+
+        let text_x = cx - text_width / 2.0; // Centered
         let text_y = cy + radius + 20.0; // Below the knob
+
         let _ = _text_renderer.draw_text(
             _vulkan_context,
             _font_atlas,
             &value_text,
             text_x,
             text_y,
-            14.0,
-            [0.9, 0.9, 0.9, 1.0],
+            text_size,
+            TEXT_PRIMARY,
         );
     }
 

@@ -154,30 +154,16 @@ impl Widget for Button {
         _screen_width: u32,
         _screen_height: u32,
     ) {
+        use crate::theme::colors::*;
+
         // Determine colors based on state
         let (bg_color, border_color, text_color) = if !self.enabled {
-            (
-                [0.3, 0.3, 0.3, 1.0], // Gray background
-                [0.2, 0.2, 0.2, 1.0], // Darker border
-                [0.5, 0.5, 0.5, 1.0], // Muted text
-            )
+            (BACKGROUND_ROOT, BORDER, TEXT_DISABLED)
         } else {
             match self.state {
-                ButtonState::Normal => (
-                    [0.2, 0.3, 0.5, 1.0], // Blue background
-                    [0.3, 0.4, 0.6, 1.0], // Lighter border
-                    [1.0, 1.0, 1.0, 1.0], // White text
-                ),
-                ButtonState::Hovered => (
-                    [0.3, 0.4, 0.6, 1.0], // Lighter blue
-                    [0.4, 0.5, 0.7, 1.0], // Even lighter border
-                    [1.0, 1.0, 1.0, 1.0], // White text
-                ),
-                ButtonState::Pressed => (
-                    [0.15, 0.25, 0.45, 1.0], // Darker blue
-                    [0.25, 0.35, 0.55, 1.0], // Darker border
-                    [0.9, 0.9, 0.9, 1.0],    // Slightly dimmer text
-                ),
+                ButtonState::Normal => (BACKGROUND_WIDGET, BORDER, TEXT_PRIMARY),
+                ButtonState::Hovered => (BACKGROUND_HOVER, BORDER_HOVER, TEXT_PRIMARY),
+                ButtonState::Pressed => (BACKGROUND_PRESSED, BORDER_FOCUS, TEXT_PRIMARY),
             }
         };
 
@@ -191,7 +177,8 @@ impl Widget for Button {
             4.0, // border radius
         );
 
-        // Draw border (as a slightly larger rect underneath)
+        // Draw border (as a slightly larger rect underneath, or outline)
+        // Draw outline:
         shape_renderer.draw_rect(
             self.bounds.x - 1.0,
             self.bounds.y - 1.0,
@@ -208,16 +195,17 @@ impl Widget for Button {
                 self.bounds.y - 2.0,
                 self.bounds.width + 4.0,
                 self.bounds.height + 4.0,
-                [0.5, 0.7, 1.0, 0.5], // Semi-transparent blue outline
+                BORDER_FOCUS, // Focus ring
                 5.0,
             );
         }
 
         // Draw label text (centered)
-        // TODO: Calculate text width for proper centering
-        let text_x = self.bounds.x + 10.0; // Left-aligned with padding for now
-        let text_y = self.bounds.y + self.bounds.height / 2.0 + 6.0; // Vertical center (approximate)
         let text_size = 16.0;
+        let text_width = _font_atlas.measure_text(&self.label, text_size);
+
+        let text_x = self.bounds.x + (self.bounds.width - text_width) / 2.0;
+        let text_y = self.bounds.y + self.bounds.height / 2.0 + 6.0; // Vertical center (approximate)
 
         let _ = text_renderer.draw_text(
             _vulkan_context,

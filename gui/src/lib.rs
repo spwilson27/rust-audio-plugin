@@ -34,6 +34,9 @@ pub mod widgets;
 // Clipboard support
 pub mod clipboard;
 
+// Theme support
+pub mod theme;
+
 pub use vulkan::{Renderer, VulkanContext};
 
 /// UI Event types for input handling

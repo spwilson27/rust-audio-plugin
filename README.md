@@ -32,7 +32,7 @@ cargo test
 # Build and bundle the plugin (with shader compilation)
 cargo run --package xtask -- bundle
 
-# Run standalone (with GUI, when implemented)
+# Run standalone (Host + GUI)
 cargo run --bin standalone
 
 # Run standalone in headless mode
@@ -83,8 +83,15 @@ Compiled shaders: `target/shaders/*.spv`
 - Strict linting (0 warnings)
 - Code coverage infrastructure (>80%)
 
-**Phase 4: Core Logic & Persistence** - Next
-**Phase 5: Test Harness (RPC)** - Planned
+**Phase 4: Widget Framework** - Complete
+- Event-driven widget system (Widget trait)
+- Core Widgets: `Button`, `Slider`, `Knob`, `Textbox`, `Container`
+- Layout engine (Flexbox-like `Row`, `Column`, `Stack`)
+- Theming system with consistent palette
+- Visual polish (Focus indicators, Hover states)
+
+**Phase 5: Core Logic & Persistence** - Next
+**Phase 6: Test Harness (RPC)** - Planned
 
 ## Project Structure
 

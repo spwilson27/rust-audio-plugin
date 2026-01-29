@@ -252,6 +252,41 @@ impl FontAtlas {
 
         Ok(Some(uvs))
     }
+
+    /// Measure the width of a string string in pixels.
+    pub fn measure_text(&self, text: &str, size: f32) -> f32 {
+        let mut width = 0.0;
+        for c in text.chars() {
+            let metrics = self.font.metrics(c, size);
+            width += metrics.advance_width;
+        }
+        width
+    }
+
+    /// Find the character index at a given X position (for mouse clicks).
+    pub fn get_char_index_at_width(&self, text: &str, size: f32, target_x: f32) -> usize {
+        let mut current_x = 0.0;
+        for (i, c) in text.chars().enumerate() {
+            let metrics = self.font.metrics(c, size);
+            let advance = metrics.advance_width;
+
+            // If the click is within the left half of this char, return this index.
+            // If right half, continue (will return next index or end).
+            // Actually, standard behavior is usually nearest boundary.
+
+            if target_x < current_x + advance / 2.0 {
+                return i;
+            }
+
+            current_x += advance;
+        }
+        text.len()
+    }
+
+    /// Get usage metrics for a single glyph (advance width)
+    pub fn get_glyph_advance(&self, c: char, size: f32) -> f32 {
+        self.font.metrics(c, size).advance_width
+    }
 }
 
 impl Drop for FontAtlas {

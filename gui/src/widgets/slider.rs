@@ -183,15 +183,16 @@ impl Widget for Slider {
         _screen_width: u32,
         _screen_height: u32,
     ) {
+        use crate::theme::colors::*;
+
         // Colors
-        let track_color = [0.2, 0.2, 0.2, 1.0];
-        let fill_color = [0.3, 0.5, 0.7, 1.0]; // Blue
-        let thumb_color = if self.hovered || self.dragging {
-            [0.5, 0.7, 0.9, 1.0] // Lighter blue
+        let track_color = BACKGROUND_PRESSED; // Darker trough
+
+        let fill_color = if self.hovered || self.dragging {
+            ACCENT_HOVER
         } else {
-            [0.4, 0.6, 0.8, 1.0]
+            ACCENT
         };
-        let focus_color = [0.5, 0.7, 1.0, 0.5];
 
         match self.orientation {
             SliderOrientation::Horizontal => {
@@ -219,7 +220,7 @@ impl Widget for Slider {
                 // Draw thumb
                 let thumb_x = self.bounds.x + fill_width - 6.0;
                 let thumb_y = self.bounds.y + self.bounds.height / 2.0 - 8.0;
-                shape_renderer.draw_rect(thumb_x, thumb_y, 12.0, 16.0, thumb_color, 4.0);
+                shape_renderer.draw_rect(thumb_x, thumb_y, 12.0, 16.0, TEXT_PRIMARY, 4.0); // White thumb
 
                 // Draw focus indicator
                 if self.focused {
@@ -228,8 +229,8 @@ impl Widget for Slider {
                         self.bounds.y - 2.0,
                         self.bounds.width + 4.0,
                         self.bounds.height + 4.0,
-                        focus_color,
-                        3.0,
+                        BORDER_FOCUS,
+                        5.0,
                     );
                 }
 
@@ -244,7 +245,7 @@ impl Widget for Slider {
                     text_x,
                     text_y,
                     14.0,
-                    [0.9, 0.9, 0.9, 1.0],
+                    TEXT_PRIMARY,
                 );
             }
             SliderOrientation::Vertical => {
@@ -273,7 +274,7 @@ impl Widget for Slider {
                 // Draw thumb
                 let thumb_x = self.bounds.x + self.bounds.width / 2.0 - 8.0;
                 let thumb_y = fill_y - 6.0;
-                shape_renderer.draw_rect(thumb_x, thumb_y, 16.0, 12.0, thumb_color, 4.0);
+                shape_renderer.draw_rect(thumb_x, thumb_y, 16.0, 12.0, TEXT_PRIMARY, 4.0);
 
                 // Draw focus indicator
                 if self.focused {
@@ -282,8 +283,8 @@ impl Widget for Slider {
                         self.bounds.y - 2.0,
                         self.bounds.width + 4.0,
                         self.bounds.height + 4.0,
-                        focus_color,
-                        3.0,
+                        BORDER_FOCUS,
+                        5.0,
                     );
                 }
 
@@ -298,7 +299,7 @@ impl Widget for Slider {
                     text_x,
                     text_y,
                     14.0,
-                    [0.9, 0.9, 0.9, 1.0],
+                    TEXT_PRIMARY,
                 );
             }
         }

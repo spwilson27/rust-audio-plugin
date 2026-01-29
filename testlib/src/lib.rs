@@ -265,10 +265,17 @@ pub fn verify_golden(actual_img: &image::RgbaImage, golden_path: &Path) {
             .unwrap_or(std::ffi::OsStr::new("unknown.png"));
         let file_name_str = file_name.to_string_lossy();
 
-        // Find project root (heuristically or current dir)
-        let target_dir = std::env::current_dir()
-            .unwrap()
-            .join("target/golden_updates");
+        // Find project root (search for Cargo.lock)
+        let mut root_dir = std::env::current_dir().unwrap();
+        while !root_dir.join("Cargo.lock").exists() {
+            if !root_dir.pop() {
+                // Fallback to current dir
+                root_dir = std::env::current_dir().unwrap();
+                break;
+            }
+        }
+
+        let target_dir = root_dir.join("target/golden_updates");
         std::fs::create_dir_all(&target_dir).unwrap();
         let actual_path = target_dir.join(file_name_str.as_ref());
 

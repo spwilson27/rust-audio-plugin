@@ -1,4 +1,4 @@
-//! Textbox widget - single-line text input
+use std::cell::RefCell;
 
 use super::{EventResult, Rect, Widget, WidgetEvent, WidgetId};
 use crate::clipboard::ClipboardManager;
@@ -22,6 +22,8 @@ pub struct Textbox {
     focused: bool,
     placeholder: String,
     clipboard: Option<ClipboardManager>,
+    /// Cache of cumulative character widths (updated in render)
+    layout_cache: RefCell<Vec<f32>>,
 }
 
 impl Textbox {
@@ -36,6 +38,7 @@ impl Textbox {
             focused: false,
             placeholder: String::new(),
             clipboard: ClipboardManager::new().ok(),
+            layout_cache: RefCell::new(Vec::new()),
         }
     }
 
@@ -223,10 +226,29 @@ impl Widget for Textbox {
 
     fn handle_event(&mut self, event: &WidgetEvent) -> EventResult {
         match event {
-            WidgetEvent::MouseDown { x: _, .. } => {
-                // TODO: Calculate cursor position from click position
-                // For now, just move to end
-                self.cursor_pos = self.text.len();
+            WidgetEvent::MouseDown { x, .. } => {
+                let x = *x as f32;
+                let text_x = self.bounds.x + 5.0;
+                let relative_x = x - text_x;
+
+                let cache = self.layout_cache.borrow();
+                let mut new_pos = self.text.len();
+
+                // If cache is valid (has at least start point)
+                if !cache.is_empty() {
+                    for i in 0..self.text.len() {
+                        let start = *cache.get(i).unwrap_or(&0.0);
+                        let end = *cache.get(i + 1).unwrap_or(&start);
+                        let center = (start + end) / 2.0;
+
+                        if relative_x < center {
+                            new_pos = i;
+                            break;
+                        }
+                    }
+                }
+
+                self.cursor_pos = new_pos;
                 self.selection_start = None;
                 EventResult::Handled
             }
@@ -316,18 +338,12 @@ impl Widget for Textbox {
         _screen_width: u32,
         _screen_height: u32,
     ) {
+        use crate::theme::colors::*;
+
         // Colors
-        let bg_color = if self.focused {
-            [0.2, 0.2, 0.25, 1.0] // Slightly lighter when focused
-        } else {
-            [0.15, 0.15, 0.15, 1.0]
-        };
-        let border_color = if self.focused {
-            [0.4, 0.6, 0.8, 1.0] // Blue border when focused
-        } else {
-            [0.3, 0.3, 0.3, 1.0]
-        };
-        let selection_color = [0.2, 0.4, 0.7, 0.5]; // Semi-transparent blue
+        let bg_color = BACKGROUND_WIDGET;
+
+        let border_color = if self.focused { BORDER_FOCUS } else { BORDER };
 
         // Draw background
         shape_renderer.draw_rect(
@@ -354,6 +370,19 @@ impl Widget for Textbox {
         let text_y = self.bounds.y + self.bounds.height / 2.0 + 6.0; // Vertical center
         let text_size = 16.0;
 
+        // Update layout cache
+        {
+            let mut cache = self.layout_cache.borrow_mut();
+            cache.clear();
+            cache.push(0.0);
+            let mut x = 0.0;
+            for c in self.text.chars() {
+                let adv = _font_atlas.get_glyph_advance(c, text_size);
+                x += adv;
+                cache.push(x);
+            }
+        }
+
         if self.text.is_empty() && !self.placeholder.is_empty() && !self.focused {
             // Draw placeholder text
             let _ = _text_renderer.draw_text(
@@ -363,7 +392,7 @@ impl Widget for Textbox {
                 text_x,
                 text_y,
                 text_size,
-                [0.5, 0.5, 0.5, 1.0], // Gray placeholder
+                TEXT_DISABLED,
             );
         } else if !self.text.is_empty() {
             // Draw actual text
@@ -374,32 +403,48 @@ impl Widget for Textbox {
                 text_x,
                 text_y,
                 text_size,
-                [0.9, 0.9, 0.9, 1.0], // White text
+                TEXT_PRIMARY,
             );
         }
 
-        // TODO: Draw selection highlight if has_selection()
-        // This would require calculating text width up to selection points
+        // Draw selection
+        if let Some(start) = self.selection_start {
+            let cache = self.layout_cache.borrow();
+            let (s, e) = if start < self.cursor_pos {
+                (start, self.cursor_pos)
+            } else {
+                (self.cursor_pos, start)
+            };
+
+            // Safely get widths
+            let total_width = *cache.last().unwrap_or(&0.0);
+            let x1 = text_x + *cache.get(s).unwrap_or(&total_width);
+            let x2 = text_x + *cache.get(e).unwrap_or(&total_width);
+
+            if x2 > x1 {
+                shape_renderer.draw_rect(
+                    x1,
+                    self.bounds.y + 4.0,
+                    x2 - x1,
+                    self.bounds.height - 8.0,
+                    SELECTION,
+                    1.0, // Slight rounding
+                );
+            }
+        }
 
         // Draw cursor if focused
         if self.focused {
-            // TODO: Calculate cursor X position based on text width up to cursor_pos
-            // For now, use a simple approximation
-            let cursor_x = text_x + (self.cursor_pos as f32 * 8.0); // Approximate character width
+            let cache = self.layout_cache.borrow();
+            let total_width = *cache.last().unwrap_or(&0.0);
+            let cursor_offset = *cache.get(self.cursor_pos).unwrap_or(&total_width);
+
+            let cursor_x = text_x + cursor_offset;
             let cursor_y = self.bounds.y + 5.0;
             let cursor_height = self.bounds.height - 10.0;
 
-            shape_renderer.draw_rect(
-                cursor_x,
-                cursor_y,
-                2.0,
-                cursor_height,
-                [1.0, 1.0, 1.0, 0.8], // White cursor
-                0.0,
-            );
+            shape_renderer.draw_rect(cursor_x, cursor_y, 2.0, cursor_height, CURSOR, 0.0);
         }
-
-        let _ = selection_color; // Suppress unused warning
     }
 
     fn bounds(&self) -> Rect {
