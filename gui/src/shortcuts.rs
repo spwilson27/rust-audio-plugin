@@ -7,6 +7,7 @@ pub enum StandardAction {
     Paste,
     SelectAll,
     DeleteWord,
+    DeleteWordForward,
 }
 
 #[cfg(target_os = "macos")]
@@ -40,6 +41,12 @@ pub fn match_shortcut(modifiers: Modifiers, keycode: u32) -> Option<StandardActi
     // 51 is commonly Delete/Backspace
     if modifiers.contains(Modifiers::ALT) && keycode == 51 {
         return Some(StandardAction::DeleteWord);
+    }
+
+    // Option + Forward Delete (Delete Word Forward)
+    // 117 is Forward Delete
+    if modifiers.contains(Modifiers::ALT) && keycode == 117 {
+        return Some(StandardAction::DeleteWordForward);
     }
 
     None

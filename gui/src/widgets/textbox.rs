@@ -231,7 +231,7 @@ impl Textbox {
         }
     }
 
-    /// Find previous word boundary
+    /// Find previous word boundary (start of word)
     fn find_prev_boundary(&self, index: usize) -> usize {
         if index == 0 {
             return 0;
@@ -240,19 +240,84 @@ impl Textbox {
         let chars: Vec<char> = self.text.chars().collect();
         let mut i = index;
 
-        // Determine class of previous character
-        // We handle two classes: Whitespace and Non-Whitespace
-        let start_is_whitespace = chars[i - 1].is_whitespace();
+        // Skip preceding whitespace
+        while i > 0 && chars[i - 1].is_whitespace() {
+            i -= 1;
+        }
 
-        while i > 0 {
-            let c = chars[i - 1];
-            if c.is_whitespace() != start_is_whitespace {
-                break;
-            }
+        // Skip preceding characters until whitespace
+        while i > 0 && !chars[i - 1].is_whitespace() {
             i -= 1;
         }
 
         i
+    }
+
+    /// Find next word boundary (start of next word)
+    fn find_next_boundary(&self, index: usize) -> usize {
+        let chars: Vec<char> = self.text.chars().collect();
+        let len = chars.len();
+        if index >= len {
+            return len;
+        }
+
+        let mut i = index;
+
+        // Skip current word
+        while i < len && !chars[i].is_whitespace() {
+            i += 1;
+        }
+
+        // Skip whitespace
+        while i < len && chars[i].is_whitespace() {
+            i += 1;
+        }
+
+        i
+    }
+
+    /// Move cursor word left
+    fn move_cursor_word_left(&mut self, select: bool) {
+        if select {
+            if self.selection_start.is_none() {
+                self.selection_start = Some(self.cursor_pos);
+            }
+        } else {
+            self.selection_start = None;
+        }
+
+        self.cursor_pos = self.find_prev_boundary(self.cursor_pos);
+    }
+
+    /// Move cursor word right
+    fn move_cursor_word_right(&mut self, select: bool) {
+        if select {
+            if self.selection_start.is_none() {
+                self.selection_start = Some(self.cursor_pos);
+            }
+        } else {
+            self.selection_start = None;
+        }
+
+        self.cursor_pos = self.find_next_boundary(self.cursor_pos);
+    }
+
+    /// Delete word forward (Option+Delete)
+    fn delete_word_forward(&mut self) {
+        if self.has_selection() {
+            self.delete_selection();
+            return;
+        }
+
+        if self.cursor_pos >= self.text.len() {
+            return;
+        }
+
+        let end = self.find_next_boundary(self.cursor_pos);
+        if end > self.cursor_pos {
+            self.text.replace_range(self.cursor_pos..end, "");
+            // Cursor pos stays same
+        }
     }
 
     /// Select all text
@@ -418,18 +483,36 @@ impl Widget for Textbox {
                             self.delete_word_backward();
                             return EventResult::ValueChanged(0.0);
                         }
+                        crate::shortcuts::StandardAction::DeleteWordForward => {
+                            self.delete_word_forward();
+                            return EventResult::ValueChanged(0.0);
+                        }
                     }
                 }
 
                 let shift = modifiers.contains(pal::Modifiers::SHIFT);
+                let alt = modifiers.contains(pal::Modifiers::ALT);
+                let meta = modifiers.contains(pal::Modifiers::META); // Cmd on Mac
 
                 match *keycode {
                     LEFT_ARROW => {
-                        self.move_cursor_left(shift);
+                        if meta {
+                            self.move_cursor_home(shift);
+                        } else if alt {
+                            self.move_cursor_word_left(shift);
+                        } else {
+                            self.move_cursor_left(shift);
+                        }
                         EventResult::Handled
                     }
                     RIGHT_ARROW => {
-                        self.move_cursor_right(shift);
+                        if meta {
+                            self.move_cursor_end(shift);
+                        } else if alt {
+                            self.move_cursor_word_right(shift);
+                        } else {
+                            self.move_cursor_right(shift);
+                        }
                         EventResult::Handled
                     }
                     HOME_KEY => {
@@ -441,10 +524,12 @@ impl Widget for Textbox {
                         EventResult::Handled
                     }
                     DELETE_KEY => {
+                        // Option+Backspace handled by match_shortcut
                         self.handle_backspace();
                         EventResult::ValueChanged(0.0) // Text changed
                     }
                     FWD_DELETE => {
+                        // Option+Delete handled by match_shortcut
                         self.handle_delete();
                         EventResult::ValueChanged(0.0)
                     }
@@ -719,5 +804,57 @@ mod tests {
     fn test_textbox_placeholder() {
         let textbox = Textbox::new(0.0, 0.0, 200.0, 30.0).with_placeholder("Enter text...");
         assert_eq!(textbox.placeholder, "Enter text...");
+    }
+
+    #[test]
+    fn test_textbox_word_navigation() {
+        let mut textbox = Textbox::new(0.0, 0.0, 200.0, 30.0);
+        textbox.set_text("Hello World Test");
+
+        // Start at end (16)
+        assert_eq!(textbox.cursor_position(), 16);
+
+        // Move word left -> Start of "Test" (12)
+        textbox.move_cursor_word_left(false);
+        assert_eq!(textbox.cursor_position(), 12);
+
+        // Move word left -> Start of "World" (6)
+        textbox.move_cursor_word_left(false);
+        assert_eq!(textbox.cursor_position(), 6);
+
+        // Move word left -> Start of "Hello" (0)
+        textbox.move_cursor_word_left(false);
+        assert_eq!(textbox.cursor_position(), 0);
+
+        // Move word right -> Start of "World" (6)
+        textbox.move_cursor_word_right(false);
+        assert_eq!(textbox.cursor_position(), 6);
+    }
+
+    #[test]
+    fn test_textbox_delete_word_forward() {
+        let mut textbox = Textbox::new(0.0, 0.0, 200.0, 30.0);
+        textbox.set_text("Hello World");
+        textbox.cursor_pos = 0;
+
+        // Delete "Hello " -> "World"
+        textbox.delete_word_forward();
+        assert_eq!(textbox.text(), "World");
+        assert_eq!(textbox.cursor_position(), 0);
+    }
+
+    #[test]
+    fn test_textbox_delete_word_backward_improved() {
+        let mut textbox = Textbox::new(0.0, 0.0, 200.0, 30.0);
+        textbox.set_text("Hello World"); // cursor at 11
+
+        // Delete "World" -> "Hello "
+        textbox.delete_word_backward();
+        assert_eq!(textbox.text(), "Hello ");
+        assert_eq!(textbox.cursor_position(), 6);
+
+        // Delete "Hello " -> ""
+        textbox.delete_word_backward();
+        assert_eq!(textbox.text(), "");
     }
 }
