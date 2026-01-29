@@ -150,3 +150,6 @@
 - [x] Widget IDs: Implement formal widget ID system
 - [x] Layout system: Implement flexible layout manager (Manual, Grid, Flex)
 - [x] Color scheme: Implemented `theme` system defined in `gui/src/theme.rs`
+
+## Bug Fixes
+- [x] Fix transparency artifacting (Text blocking, Knob square overlay)

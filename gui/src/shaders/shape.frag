@@ -34,6 +34,8 @@ void main() {
     // fwidth gives change in dist per pixel.
     float delta = fwidth(dist);
     float alpha = 1.0 - smoothstep(-delta, delta, dist);
-
-    outFragColor = vec4(inColor.rgb, inColor.a * alpha);
+    
+    // Premultiplied Alpha: rgb * a, a
+    float outputAlpha = inColor.a * alpha;
+    outFragColor = vec4(inColor.rgb * outputAlpha, outputAlpha);
 }

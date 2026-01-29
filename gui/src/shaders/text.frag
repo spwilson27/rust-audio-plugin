@@ -14,5 +14,7 @@ void main() {
     // Discard fully transparent (optional, but good for depth if used)
     if (alpha <= 0.0) discard;
     
-    outColor = vec4(fragColor.rgb, fragColor.a * alpha);
+    // Premultiplied alpha
+    float outputAlpha = fragColor.a * alpha;
+    outColor = vec4(fragColor.rgb * outputAlpha, outputAlpha);
 }
