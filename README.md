@@ -25,8 +25,15 @@ A metal-down VST3/CLAP audio plugin built with Rust and Vulkan.
 # Build all workspace crates
 cargo build
 
-# Run tests (5 tests passing)
-cargo test
+# Run tests (Linux, MacOS)
+cargo test --package test-e2e
+
+# Run tests inside Docker (Linux environment)
+cargo run --package xtask -- test --docker
+
+# Run tests for a specific package
+cargo run --package xtask -- test --package test-e2e
+
 # (On golden test failure, follow the printed `cp` command to update golden images)
 
 # Build and bundle the plugin (with shader compilation)
@@ -37,8 +44,29 @@ cargo run --bin standalone
 
 # Run standalone in headless mode
 cargo run --bin standalone -- --headless
+```
 
-# Run code coverage analysis
+### Golden Testing
+
+This project uses **Golden Image Testing** for UI verification.
+
+-   **Platform-specific images**: Golden images are stored in `test-e2e/goldens/` with suffixes:
+    -   `*.linux.png` (used in Docker/Linux)
+    -   `*.macos.png` (used in native macOS)
+-   **Updating Images**: If a test fails due to visual changes, the test output will provide a `cp` command.
+    -   When running in **Docker**, `xtask` mounts a host temporary directory. The suggested `cp` command will use paths that allow you to update the repository directly from your host terminal.
+
+### Docker Testing
+
+Testing the GPU-accelerated UI on Linux is handled via Docker:
+-   `cargo run -p xtask -- test --docker`
+-   This command builds the `rust-vst-test` image, runs a container with `Xvfb`, and executes the E2E tests.
+-   UI snapshots from failing Docker tests are automatically synchronized to your host system for easy review and golden updates.
+
+### Code Quality
+
+```bash
+# Run code coverage analysis (requires cargo-llvm-cov)
 cargo run --package xtask -- coverage
 
 # Verify coverage (fails if < 80%)
@@ -127,6 +155,10 @@ This project follows strict real-time audio programming rules:
 - No mutex locking on the audio thread
 - Use `rtrb` or atomics for parameter communication
 - All FFI entry points wrapped in `catch_unwind` for panic safety
+
+## AI Agent Instructions
+
+See [spec.md](spec.md) for detailed instructions for AI agents working on this project.
 
 ## License
 

@@ -54,6 +54,8 @@ enum Commands {
         #[arg(short, long)]
         package: Option<String>,
     },
+    /// Run all tests
+    TestAll {},
 }
 
 fn main() -> Result<()> {
@@ -65,6 +67,7 @@ fn main() -> Result<()> {
         Commands::Coverage { verify } => coverage(verify),
         Commands::Build { release, docker } => build(release, docker),
         Commands::Test { docker, package } => test(docker, package),
+        Commands::TestAll {} => test_all(),
     }
 }
 
@@ -93,6 +96,14 @@ fn build(release: bool, docker: bool) -> Result<()> {
         }
         println!("  ✓ Build complete");
     }
+    Ok(())
+}
+
+fn test_all() -> Result<()> {
+    test(/*docker=*/ false, /*package=*/ None)?;
+    test(/*docker=*/ true, /*package=*/ None)?;
+    coverage(/*verify=*/ false)?;
+    lint()?;
     Ok(())
 }
 

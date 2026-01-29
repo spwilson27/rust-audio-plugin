@@ -15,9 +15,9 @@ trigger: always_on
 **Additional Context**
 
 - The project uses git to manage history, use git read commands if additional context is needed.
-- Read architecture_v2.md for full context of the project.
+- Read spec.md in the root directory of the project for full context of the project.
 - Read prompts.md for additional context on future work.
 
 Additional Rules:
 
-- Do not use emoji's in documentation. (It's tacky.)
+- Do not use emojis in documentation. (It's tacky.)
