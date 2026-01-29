@@ -57,6 +57,11 @@ impl WidgetContainer {
             layout.add_widget(bounds.width, bounds.height);
         }
 
+        if widget.is_focused() {
+            self.clear_focus();
+            self.focused_index = Some(index);
+        }
+
         self.widgets.push(widget);
         self.widget_map.insert(id, index);
     }
@@ -117,6 +122,7 @@ impl WidgetContainer {
             }
             UIEvent::KeyDown { keycode } => self.handle_key_down(keycode),
             UIEvent::KeyUp { keycode } => self.handle_key_up(keycode),
+            UIEvent::TextInput(text) => self.handle_text_input(text),
             _ => Vec::new(), // Ignore other events
         }
     }
@@ -258,6 +264,23 @@ impl WidgetContainer {
         // Send to focused widget
         if let Some(widget_index) = self.focused_index {
             let event = WidgetEvent::KeyUp { keycode };
+            if let Some(widget) = self.widgets.get_mut(widget_index) {
+                let result = widget.handle_event(&event);
+                if !matches!(result, EventResult::NotHandled) {
+                    results.push(result);
+                }
+            }
+        }
+
+        results
+    }
+
+    fn handle_text_input(&mut self, text: String) -> Vec<EventResult> {
+        let mut results = Vec::new();
+
+        // Send to focused widget
+        if let Some(widget_index) = self.focused_index {
+            let event = WidgetEvent::TextInput(text);
             if let Some(widget) = self.widgets.get_mut(widget_index) {
                 let result = widget.handle_event(&event);
                 if !matches!(result, EventResult::NotHandled) {

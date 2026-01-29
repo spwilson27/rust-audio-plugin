@@ -17,6 +17,7 @@ message InputEventMsg {
         MouseMsg mouse = 1;
         KeyMsg key = 2;
         QuitMsg quit = 3;
+        TextInputMsg text_input = 4;
     }
 }
 
@@ -41,6 +42,10 @@ message KeyMsg {
     }
     Type type = 1;
     uint32 keycode = 2;
+}
+
+message TextInputMsg {
+    string text = 1;
 }
 
 message ResizeMsg {

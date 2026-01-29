@@ -330,9 +330,9 @@ fn extract_widget_state(
         state.widget_type = "Textbox".to_string();
         state.specific_state = Some(widget_state::SpecificState::Textbox(TextboxState {
             text: textbox.text().to_string(),
-            cursor_pos: 0,
-            has_selection: false,
-            placeholder: "".to_string(),
+            cursor_pos: textbox.cursor_position() as u32,
+            has_selection: textbox.has_selection(),
+            placeholder: textbox.placeholder().to_string(), // assuming access or skip
         }));
     }
 

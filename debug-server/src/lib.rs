@@ -101,6 +101,9 @@ impl DebugControl for DebugControlImpl {
             Some(debug_control::input_event_msg::Event::Mouse(mouse)) => map_mouse_event(mouse),
             Some(debug_control::input_event_msg::Event::Key(key)) => map_key_event(key),
             Some(debug_control::input_event_msg::Event::Quit(_)) => UIEvent::Quit,
+            Some(debug_control::input_event_msg::Event::TextInput(text_msg)) => {
+                UIEvent::TextInput(text_msg.text)
+            }
             None => return Err(Status::invalid_argument("No event provided")),
         };
 

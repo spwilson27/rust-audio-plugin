@@ -24,6 +24,8 @@ pub struct Textbox {
     clipboard: Option<ClipboardManager>,
     /// Cache of cumulative character widths (updated in render)
     layout_cache: RefCell<Vec<f32>>,
+    is_dragging: bool,
+    last_click_time: Option<std::time::Instant>,
 }
 
 impl Textbox {
@@ -39,6 +41,8 @@ impl Textbox {
             placeholder: String::new(),
             clipboard: ClipboardManager::new().ok(),
             layout_cache: RefCell::new(Vec::new()),
+            is_dragging: false,
+            last_click_time: None,
         }
     }
 
@@ -46,6 +50,11 @@ impl Textbox {
     pub fn with_placeholder(mut self, placeholder: impl Into<String>) -> Self {
         self.placeholder = placeholder.into();
         self
+    }
+
+    /// Get placeholder text
+    pub fn placeholder(&self) -> &str {
+        &self.placeholder
     }
 
     /// Get the current text
@@ -209,6 +218,61 @@ impl Textbox {
         self.selection_start = Some(0);
         self.cursor_pos = self.text.len();
     }
+
+    /// Find word boundaries around index
+    fn find_word_boundaries(&self, index: usize) -> (usize, usize) {
+        if self.text.is_empty() {
+            return (0, 0);
+        }
+
+        let chars: Vec<char> = self.text.chars().collect();
+        let len = chars.len();
+        let index = index.min(len);
+
+        // Find start
+        let mut start = index;
+        while start > 0 {
+            let c = chars[start - 1];
+            if c.is_whitespace() {
+                break;
+            }
+            start -= 1;
+        }
+
+        // Find end
+        let mut end = index;
+        while end < len {
+            let c = chars[end];
+            if c.is_whitespace() {
+                break;
+            }
+            end += 1;
+        }
+
+        (start, end)
+    }
+
+    /// Calculate cursor index from x coordinate
+    fn get_cursor_index_from_x(&self, x: f32) -> usize {
+        let text_x = self.bounds.x + 5.0;
+        let relative_x = x - text_x;
+
+        let cache = self.layout_cache.borrow();
+
+        // If cache is valid
+        if !cache.is_empty() {
+            for i in 0..self.text.len() {
+                let start = *cache.get(i).unwrap_or(&0.0);
+                let end = *cache.get(i + 1).unwrap_or(&start);
+                let center = (start + end) / 2.0;
+
+                if relative_x < center {
+                    return i;
+                }
+            }
+        }
+        self.text.len()
+    }
 }
 
 impl Widget for Textbox {
@@ -226,31 +290,58 @@ impl Widget for Textbox {
 
     fn handle_event(&mut self, event: &WidgetEvent) -> EventResult {
         match event {
-            WidgetEvent::MouseDown { x, .. } => {
-                let x = *x as f32;
-                let text_x = self.bounds.x + 5.0;
-                let relative_x = x - text_x;
+            WidgetEvent::MouseDown { x, button, .. } => {
+                if *button == 0 {
+                    let now = std::time::Instant::now();
+                    let is_double_click = if let Some(last) = self.last_click_time {
+                        now.duration_since(last).as_millis() < 500
+                    } else {
+                        false
+                    };
+                    self.last_click_time = Some(now);
 
-                let cache = self.layout_cache.borrow();
-                let mut new_pos = self.text.len();
+                    let x = *x as f32;
+                    let new_pos = self.get_cursor_index_from_x(x);
 
-                // If cache is valid (has at least start point)
-                if !cache.is_empty() {
-                    for i in 0..self.text.len() {
-                        let start = *cache.get(i).unwrap_or(&0.0);
-                        let end = *cache.get(i + 1).unwrap_or(&start);
-                        let center = (start + end) / 2.0;
-
-                        if relative_x < center {
-                            new_pos = i;
-                            break;
-                        }
+                    if is_double_click {
+                        let (start, end) = self.find_word_boundaries(new_pos);
+                        self.selection_start = Some(start);
+                        self.cursor_pos = end;
+                        self.is_dragging = false; // Stop dragging on double click
+                    } else {
+                        self.cursor_pos = new_pos;
+                        self.selection_start = None;
+                        self.is_dragging = true;
                     }
+                    EventResult::CaptureMouse
+                } else {
+                    EventResult::NotHandled
                 }
+            }
+            WidgetEvent::MouseMove { x, .. } => {
+                if self.is_dragging {
+                    let x = *x as f32;
+                    let new_pos = self.get_cursor_index_from_x(x);
 
-                self.cursor_pos = new_pos;
-                self.selection_start = None;
-                EventResult::Handled
+                    if self.selection_start.is_none() {
+                        // Start selection from initial click position (roughly)
+                        // Ideally we'd store the initial click index, but for now
+                        // we can infer it or just start selection behavior
+                        self.selection_start = Some(self.cursor_pos);
+                    }
+                    self.cursor_pos = new_pos;
+                    EventResult::Handled
+                } else {
+                    EventResult::NotHandled
+                }
+            }
+            WidgetEvent::MouseUp { .. } => {
+                if self.is_dragging {
+                    self.is_dragging = false;
+                    EventResult::ReleaseMouse
+                } else {
+                    EventResult::NotHandled
+                }
             }
             WidgetEvent::KeyDown { keycode } => {
                 // macOS keycodes
@@ -313,12 +404,14 @@ impl Widget for Textbox {
                         EventResult::ValueChanged(0.0)
                     }
                     _ => {
-                        // Regular character input
-                        // TODO: Convert keycode to character
-                        // For now, just return NotHandled
+                        // Regular character input dealt with via TextInput event
                         EventResult::NotHandled
                     }
                 }
+            }
+            WidgetEvent::TextInput(text) => {
+                self.insert_text(text);
+                EventResult::ValueChanged(0.0)
             }
             WidgetEvent::FocusGained => EventResult::Handled,
             WidgetEvent::FocusLost => {

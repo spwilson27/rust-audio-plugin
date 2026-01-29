@@ -163,6 +163,12 @@ fn get_rust_view_class() -> &'static AnyClass {
                 key_up as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
             );
 
+            // Text Input
+            builder.add_method(
+                sel!(insertText:),
+                insert_text as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+
             let cls = builder.register();
             CLASS = cls;
         });
@@ -329,10 +335,58 @@ extern "C" fn key_down(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
 
         let keycode: u16 = objc2::msg_send![event, keyCode];
 
+        // 1. Pass key event to system for text interpretation
+        let ns_array_class = AnyClass::get("NSArray").unwrap();
+        let events: Retained<AnyObject> =
+            objc2::msg_send_id![ns_array_class, arrayWithObject: event];
+        let _: () = objc2::msg_send![this, interpretKeyEvents: &*events];
+
+        // 2. Also dispatch raw KeyDown for navigation keys (Arrows, Esc, etc.)
+        // Ideally we'd filter this if text input consumed it, but NSTextInputClient is complex.
+        // For now, we send both. Widgets like Textbox should ignore KeyDown if they handled TextInput.
         if let Some(router) = get_event_router(this) {
             router.route_event(crate::UIEvent::KeyDown {
                 keycode: keycode.into(),
             });
+        }
+    }
+}
+
+/// Insert text handler (called by interpretKeyEvents)
+extern "C" fn insert_text(this: *mut AnyObject, _sel: Sel, object: *mut AnyObject) {
+    unsafe {
+        // object can be NSString or NSAttributedString
+        // We only care about the string content
+        let string_obj: *mut AnyObject = if objc2::msg_send![object, isKindOfClass: AnyClass::get("NSAttributedString").unwrap()]
+        {
+            objc2::msg_send![object, string]
+        } else {
+            object
+        };
+
+        // Convert NSString to Rust String
+        // This requires some careful bridging.
+        // For simplicity in this `unsafe` block without `objc2-foundation` features enabled:
+        let utf8_string: *const std::ffi::c_char = objc2::msg_send![string_obj, UTF8String];
+        if !utf8_string.is_null() {
+            let limit = 1024; // Limit length for safety
+            let mut bytes = Vec::new();
+            for i in 0..limit {
+                let b = *utf8_string.add(i);
+                if b == 0 {
+                    break;
+                }
+                bytes.push(b as u8);
+            }
+
+            if let Ok(text) = String::from_utf8(bytes) {
+                // Ignore empty strings or control characters if needed
+                if !text.is_empty() {
+                    if let Some(router) = get_event_router(this) {
+                        router.route_event(crate::UIEvent::TextInput(text));
+                    }
+                }
+            }
         }
     }
 }

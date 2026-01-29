@@ -46,6 +46,8 @@ pub enum UIEvent {
     KeyUp {
         keycode: u32,
     },
+    /// Text input event (UTF-8 string)
+    TextInput(String),
     Quit,
     /// Display sync callback - time to render a new frame
     RenderFrame,

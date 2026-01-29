@@ -90,6 +90,8 @@ pub enum WidgetEvent {
 
     /// Key released while widget has focus
     KeyUp { keycode: u32 },
+    /// Text input event (UTF-8 string)
+    TextInput(String),
 
     /// Widget gained focus
     FocusGained,
