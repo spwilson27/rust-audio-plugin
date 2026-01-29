@@ -271,13 +271,19 @@ fn map_mouse_event(msg: MouseMsg) -> UIEvent {
 }
 
 fn map_key_event(msg: KeyMsg) -> UIEvent {
+    let modifiers = pal::Modifiers::from_bits_truncate(msg.modifiers);
     match msg.r#type {
         0 => UIEvent::KeyDown {
             keycode: msg.keycode,
+            modifiers,
         }, // DOWN
         1 => UIEvent::KeyUp {
             keycode: msg.keycode,
+            modifiers,
         }, // UP
-        _ => UIEvent::KeyDown { keycode: 0 },
+        _ => UIEvent::KeyDown {
+            keycode: 0,
+            modifiers: pal::Modifiers::empty(),
+        },
     }
 }

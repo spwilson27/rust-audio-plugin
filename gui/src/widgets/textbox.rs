@@ -213,6 +213,48 @@ impl Textbox {
         }
     }
 
+    /// Delete word backward (Option+Backspace)
+    fn delete_word_backward(&mut self) {
+        if self.has_selection() {
+            self.delete_selection();
+            return;
+        }
+
+        if self.cursor_pos == 0 {
+            return;
+        }
+
+        let start = self.find_prev_boundary(self.cursor_pos);
+        if start < self.cursor_pos {
+            self.text.replace_range(start..self.cursor_pos, "");
+            self.cursor_pos = start;
+        }
+    }
+
+    /// Find previous word boundary
+    fn find_prev_boundary(&self, index: usize) -> usize {
+        if index == 0 {
+            return 0;
+        }
+
+        let chars: Vec<char> = self.text.chars().collect();
+        let mut i = index;
+
+        // Determine class of previous character
+        // We handle two classes: Whitespace and Non-Whitespace
+        let start_is_whitespace = chars[i - 1].is_whitespace();
+
+        while i > 0 {
+            let c = chars[i - 1];
+            if c.is_whitespace() != start_is_whitespace {
+                break;
+            }
+            i -= 1;
+        }
+
+        i
+    }
+
     /// Select all text
     fn select_all(&mut self) {
         self.selection_start = Some(0);
@@ -343,7 +385,7 @@ impl Widget for Textbox {
                     EventResult::NotHandled
                 }
             }
-            WidgetEvent::KeyDown { keycode } => {
+            WidgetEvent::KeyDown { keycode, modifiers } => {
                 // macOS keycodes
                 const LEFT_ARROW: u32 = 123;
                 const RIGHT_ARROW: u32 = 124;
@@ -351,15 +393,35 @@ impl Widget for Textbox {
                 const FWD_DELETE: u32 = 117; // Delete
                 const HOME_KEY: u32 = 115;
                 const END_KEY: u32 = 119;
-                const A_KEY: u32 = 0; // Cmd+A (select all)
-                const C_KEY: u32 = 8; // Cmd+C (copy)
-                const V_KEY: u32 = 9; // Cmd+V (paste)
-                const X_KEY: u32 = 7; // Cmd+X (cut)
 
-                // TODO: Detect modifier keys (Shift, Cmd, Ctrl)
-                // For now, assuming no modifiers
-                let shift = false;
-                let cmd = false;
+                // Check for standard OS shortcuts
+                if let Some(action) = crate::shortcuts::match_shortcut(*modifiers, *keycode) {
+                    match action {
+                        crate::shortcuts::StandardAction::Copy => {
+                            self.copy();
+                            return EventResult::Handled;
+                        }
+                        crate::shortcuts::StandardAction::Paste => {
+                            self.paste();
+                            return EventResult::ValueChanged(0.0);
+                        }
+                        crate::shortcuts::StandardAction::Cut => {
+                            self.copy();
+                            self.delete_selection();
+                            return EventResult::ValueChanged(0.0);
+                        }
+                        crate::shortcuts::StandardAction::SelectAll => {
+                            self.select_all();
+                            return EventResult::Handled;
+                        }
+                        crate::shortcuts::StandardAction::DeleteWord => {
+                            self.delete_word_backward();
+                            return EventResult::ValueChanged(0.0);
+                        }
+                    }
+                }
+
+                let shift = modifiers.contains(pal::Modifiers::SHIFT);
 
                 match *keycode {
                     LEFT_ARROW => {
@@ -384,23 +446,6 @@ impl Widget for Textbox {
                     }
                     FWD_DELETE => {
                         self.handle_delete();
-                        EventResult::ValueChanged(0.0)
-                    }
-                    A_KEY if cmd => {
-                        self.select_all();
-                        EventResult::Handled
-                    }
-                    C_KEY if cmd => {
-                        self.copy();
-                        EventResult::Handled
-                    }
-                    V_KEY if cmd => {
-                        self.paste();
-                        EventResult::ValueChanged(0.0)
-                    }
-                    X_KEY if cmd => {
-                        self.copy();
-                        self.delete_selection();
                         EventResult::ValueChanged(0.0)
                     }
                     _ => {

@@ -136,7 +136,10 @@ impl Widget for Slider {
                 self.hovered = false;
                 EventResult::Handled
             }
-            WidgetEvent::KeyDown { keycode } => {
+            WidgetEvent::KeyDown {
+                keycode,
+                modifiers: _,
+            } => {
                 // Arrow keys for fine adjustment
                 const LEFT_ARROW: u32 = 123; // macOS
                 const RIGHT_ARROW: u32 = 124;
@@ -393,7 +396,10 @@ mod tests {
         slider.set_value(0.5);
 
         // Right arrow should increase
-        let result = slider.handle_event(&WidgetEvent::KeyDown { keycode: 124 });
+        let result = slider.handle_event(&WidgetEvent::KeyDown {
+            keycode: 124,
+            modifiers: pal::Modifiers::empty(),
+        });
         match result {
             EventResult::ValueChanged(val) => {
                 assert!(val > 0.5);
@@ -403,7 +409,10 @@ mod tests {
         }
 
         // Left arrow should decrease
-        let result = slider.handle_event(&WidgetEvent::KeyDown { keycode: 123 });
+        let result = slider.handle_event(&WidgetEvent::KeyDown {
+            keycode: 123,
+            modifiers: pal::Modifiers::empty(),
+        });
         match result {
             EventResult::ValueChanged(val) => {
                 assert!((val - 0.5).abs() < 0.001);

@@ -143,7 +143,10 @@ impl Widget for Knob {
                 self.hovered = false;
                 EventResult::Handled
             }
-            WidgetEvent::KeyDown { keycode } => {
+            WidgetEvent::KeyDown {
+                keycode,
+                modifiers: _,
+            } => {
                 // Arrow keys for fine adjustment
                 const UP_ARROW: u32 = 126; // macOS
                 const DOWN_ARROW: u32 = 125;
@@ -332,7 +335,10 @@ mod tests {
         knob.set_value(0.5);
 
         // Up arrow should increase
-        let result = knob.handle_event(&WidgetEvent::KeyDown { keycode: 126 });
+        let result = knob.handle_event(&WidgetEvent::KeyDown {
+            keycode: 126,
+            modifiers: pal::Modifiers::empty(),
+        });
         match result {
             EventResult::ValueChanged(val) => {
                 assert!(val > 0.5);
@@ -342,7 +348,10 @@ mod tests {
         }
 
         // Down arrow should decrease
-        let result = knob.handle_event(&WidgetEvent::KeyDown { keycode: 125 });
+        let result = knob.handle_event(&WidgetEvent::KeyDown {
+            keycode: 125,
+            modifiers: pal::Modifiers::empty(),
+        });
         match result {
             EventResult::ValueChanged(val) => {
                 assert!((val - 0.5).abs() < 0.001);

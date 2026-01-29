@@ -341,12 +341,32 @@ extern "C" fn key_down(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
             objc2::msg_send_id![ns_array_class, arrayWithObject: event];
         let _: () = objc2::msg_send![this, interpretKeyEvents: &*events];
 
+        // Helper to extract modifiers
+        let flags: u64 = objc2::msg_send![event, modifierFlags];
+        let mut modifiers = crate::Modifiers::empty();
+
+        // NSEventModifierFlagShift = 1 << 17
+        if (flags & (1 << 17)) != 0 {
+            modifiers.insert(crate::Modifiers::SHIFT);
+        }
+        // NSEventModifierFlagControl = 1 << 18
+        if (flags & (1 << 18)) != 0 {
+            modifiers.insert(crate::Modifiers::CTRL);
+        }
+        // NSEventModifierFlagOption = 1 << 19
+        if (flags & (1 << 19)) != 0 {
+            modifiers.insert(crate::Modifiers::ALT);
+        }
+        // NSEventModifierFlagCommand = 1 << 20
+        if (flags & (1 << 20)) != 0 {
+            modifiers.insert(crate::Modifiers::META);
+        }
+
         // 2. Also dispatch raw KeyDown for navigation keys (Arrows, Esc, etc.)
-        // Ideally we'd filter this if text input consumed it, but NSTextInputClient is complex.
-        // For now, we send both. Widgets like Textbox should ignore KeyDown if they handled TextInput.
         if let Some(router) = get_event_router(this) {
             router.route_event(crate::UIEvent::KeyDown {
                 keycode: keycode.into(),
+                modifiers,
             });
         }
     }
@@ -365,8 +385,6 @@ extern "C" fn insert_text(this: *mut AnyObject, _sel: Sel, object: *mut AnyObjec
         };
 
         // Convert NSString to Rust String
-        // This requires some careful bridging.
-        // For simplicity in this `unsafe` block without `objc2-foundation` features enabled:
         let utf8_string: *const std::ffi::c_char = objc2::msg_send![string_obj, UTF8String];
         if !utf8_string.is_null() {
             let limit = 1024; // Limit length for safety
@@ -380,7 +398,6 @@ extern "C" fn insert_text(this: *mut AnyObject, _sel: Sel, object: *mut AnyObjec
             }
 
             if let Ok(text) = String::from_utf8(bytes) {
-                // Ignore empty strings or control characters if needed
                 if !text.is_empty() {
                     if let Some(router) = get_event_router(this) {
                         router.route_event(crate::UIEvent::TextInput(text));
@@ -400,9 +417,26 @@ extern "C" fn key_up(this: *mut AnyObject, _sel: Sel, event: *mut AnyObject) {
 
         let keycode: u16 = objc2::msg_send![event, keyCode];
 
+        let flags: u64 = objc2::msg_send![event, modifierFlags];
+        let mut modifiers = crate::Modifiers::empty();
+
+        if (flags & (1 << 17)) != 0 {
+            modifiers.insert(crate::Modifiers::SHIFT);
+        }
+        if (flags & (1 << 18)) != 0 {
+            modifiers.insert(crate::Modifiers::CTRL);
+        }
+        if (flags & (1 << 19)) != 0 {
+            modifiers.insert(crate::Modifiers::ALT);
+        }
+        if (flags & (1 << 20)) != 0 {
+            modifiers.insert(crate::Modifiers::META);
+        }
+
         if let Some(router) = get_event_router(this) {
             router.route_event(crate::UIEvent::KeyUp {
                 keycode: keycode.into(),
+                modifiers,
             });
         }
     }

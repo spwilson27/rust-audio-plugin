@@ -42,9 +42,11 @@ pub enum UIEvent {
     },
     KeyDown {
         keycode: u32,
+        modifiers: Modifiers,
     },
     KeyUp {
         keycode: u32,
+        modifiers: Modifiers,
     },
     /// Text input event (UTF-8 string)
     TextInput(String),
@@ -60,6 +62,17 @@ pub enum UIEvent {
     CaptureScreen(crossbeam_channel::Sender<(Vec<u8>, u32, u32)>),
     /// Custom event for application-specific communication (e.g., debug messages)
     Custom(std::sync::Arc<dyn std::any::Any + Send + Sync>),
+}
+
+bitflags::bitflags! {
+    /// Keyboard modifier flags
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Modifiers: u32 {
+        const SHIFT = 1 << 0;
+        const CTRL  = 1 << 1;
+        const ALT   = 1 << 2;
+        const META  = 1 << 3; // Command on Mac, Windows on Win
+    }
 }
 
 /// Core trait for platform-specific window implementations

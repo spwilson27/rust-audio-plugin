@@ -106,7 +106,10 @@ impl Widget for Button {
                 self.state = ButtonState::Normal;
                 EventResult::Handled
             }
-            WidgetEvent::KeyDown { keycode } => {
+            WidgetEvent::KeyDown {
+                keycode,
+                modifiers: _,
+            } => {
                 // Space or Enter activates button
                 const SPACE_KEY: u32 = 49; // macOS keycode
                 const ENTER_KEY: u32 = 36; // macOS keycode
@@ -118,7 +121,10 @@ impl Widget for Button {
                     EventResult::NotHandled
                 }
             }
-            WidgetEvent::KeyUp { keycode } => {
+            WidgetEvent::KeyUp {
+                keycode,
+                modifiers: _,
+            } => {
                 const SPACE_KEY: u32 = 49;
                 const ENTER_KEY: u32 = 36;
 
@@ -293,12 +299,18 @@ mod tests {
         button.set_focused(true);
 
         // Press space
-        let result = button.handle_event(&WidgetEvent::KeyDown { keycode: 49 });
+        let result = button.handle_event(&WidgetEvent::KeyDown {
+            keycode: 49,
+            modifiers: pal::Modifiers::empty(),
+        });
         assert_eq!(result, EventResult::Handled);
         assert_eq!(button.state(), ButtonState::Pressed);
 
         // Release space
-        let result = button.handle_event(&WidgetEvent::KeyUp { keycode: 49 });
+        let result = button.handle_event(&WidgetEvent::KeyUp {
+            keycode: 49,
+            modifiers: pal::Modifiers::empty(),
+        });
         assert_eq!(result, EventResult::ValueChanged(1.0));
     }
 

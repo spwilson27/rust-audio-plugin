@@ -86,10 +86,16 @@ pub enum WidgetEvent {
     MouseExit,
 
     /// Key pressed while widget has focus
-    KeyDown { keycode: u32 },
+    KeyDown {
+        keycode: u32,
+        modifiers: pal::Modifiers,
+    },
 
     /// Key released while widget has focus
-    KeyUp { keycode: u32 },
+    KeyUp {
+        keycode: u32,
+        modifiers: pal::Modifiers,
+    },
     /// Text input event (UTF-8 string)
     TextInput(String),
 

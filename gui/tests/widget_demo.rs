@@ -169,7 +169,10 @@ fn test_widget_demo_interactions() {
 
     // Simulate Tab navigation
     println!("\n--- Simulating Tab key (focus navigation) ---");
-    container.handle_ui_event(UIEvent::KeyDown { keycode: 48 }); // Tab
+    container.handle_ui_event(UIEvent::KeyDown {
+        keycode: 48,
+        modifiers: pal::Modifiers::empty(),
+    }); // Tab
     println!("  Focused widget should change (container manages focus)");
 
     println!("\nDemo complete!");

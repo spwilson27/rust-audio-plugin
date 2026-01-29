@@ -120,8 +120,8 @@ impl WidgetContainer {
                 self.last_mouse_pos = (x, y);
                 self.handle_mouse_move(x, y)
             }
-            UIEvent::KeyDown { keycode } => self.handle_key_down(keycode),
-            UIEvent::KeyUp { keycode } => self.handle_key_up(keycode),
+            UIEvent::KeyDown { keycode, modifiers } => self.handle_key_down(keycode, modifiers),
+            UIEvent::KeyUp { keycode, modifiers } => self.handle_key_up(keycode, modifiers),
             UIEvent::TextInput(text) => self.handle_text_input(text),
             _ => Vec::new(), // Ignore other events
         }
@@ -233,20 +233,24 @@ impl WidgetContainer {
         results
     }
 
-    fn handle_key_down(&mut self, keycode: u32) -> Vec<EventResult> {
+    fn handle_key_down(&mut self, keycode: u32, modifiers: pal::Modifiers) -> Vec<EventResult> {
         let mut results = Vec::new();
 
         // Check for Tab (focus navigation)
         const TAB_KEY: u32 = 48; // macOS keycode for Tab
         if keycode == TAB_KEY {
-            // TODO: Check for Shift modifier to go backwards
-            self.focus_next();
+            // Check for Shift modifier to go backwards
+            if modifiers.contains(pal::Modifiers::SHIFT) {
+                self.focus_previous();
+            } else {
+                self.focus_next();
+            }
             return results;
         }
 
         // Send to focused widget
         if let Some(widget_index) = self.focused_index {
-            let event = WidgetEvent::KeyDown { keycode };
+            let event = WidgetEvent::KeyDown { keycode, modifiers };
             if let Some(widget) = self.widgets.get_mut(widget_index) {
                 let result = widget.handle_event(&event);
                 if !matches!(result, EventResult::NotHandled) {
@@ -258,12 +262,12 @@ impl WidgetContainer {
         results
     }
 
-    fn handle_key_up(&mut self, keycode: u32) -> Vec<EventResult> {
+    fn handle_key_up(&mut self, keycode: u32, modifiers: pal::Modifiers) -> Vec<EventResult> {
         let mut results = Vec::new();
 
         // Send to focused widget
         if let Some(widget_index) = self.focused_index {
-            let event = WidgetEvent::KeyUp { keycode };
+            let event = WidgetEvent::KeyUp { keycode, modifiers };
             if let Some(widget) = self.widgets.get_mut(widget_index) {
                 let result = widget.handle_event(&event);
                 if !matches!(result, EventResult::NotHandled) {

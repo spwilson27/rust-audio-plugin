@@ -155,6 +155,7 @@ async fn test_text_entry_and_deletion() {
                     debug_server::debug_control::KeyMsg {
                         r#type: debug_server::debug_control::key_msg::Type::Down as i32,
                         keycode: 51, // Backspace
+                        modifiers: 0,
                     },
                 )),
             })
@@ -167,6 +168,7 @@ async fn test_text_entry_and_deletion() {
                     debug_server::debug_control::KeyMsg {
                         r#type: debug_server::debug_control::key_msg::Type::Up as i32,
                         keycode: 51,
+                        modifiers: 0,
                     },
                 )),
             })

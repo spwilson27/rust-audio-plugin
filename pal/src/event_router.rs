@@ -122,8 +122,14 @@ mod tests {
         });
 
         // Simulate RPC injection
-        router.inject_event(UIEvent::KeyDown { keycode: 65 });
-        router.inject_event(UIEvent::KeyUp { keycode: 65 });
+        router.inject_event(UIEvent::KeyDown {
+            keycode: 65,
+            modifiers: crate::Modifiers::empty(),
+        });
+        router.inject_event(UIEvent::KeyUp {
+            keycode: 65,
+            modifiers: crate::Modifiers::empty(),
+        });
 
         // Test passes if no panic occurs
     }

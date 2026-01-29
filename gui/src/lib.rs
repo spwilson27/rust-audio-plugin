@@ -37,6 +37,8 @@ pub mod clipboard;
 // Theme support
 pub mod theme;
 
+pub mod shortcuts;
+
 pub use vulkan::{Renderer, VulkanContext};
 
 /// UI Event types for input handling
@@ -196,11 +198,17 @@ impl GuiContext {
             UIEvent::MouseMove { x, y } => pal::UIEvent::MouseMove { x, y },
             UIEvent::KeyDown { .. } => {
                 // TODO: Map Key enum to keycode properly
-                pal::UIEvent::KeyDown { keycode: 0 }
+                pal::UIEvent::KeyDown {
+                    keycode: 0,
+                    modifiers: pal::Modifiers::empty(),
+                }
             }
             UIEvent::KeyUp { .. } => {
                 // TODO: Map Key enum to keycode properly
-                pal::UIEvent::KeyUp { keycode: 0 }
+                pal::UIEvent::KeyUp {
+                    keycode: 0,
+                    modifiers: pal::Modifiers::empty(),
+                }
             }
             UIEvent::Resize { width, height } => {
                 self.width = width;
