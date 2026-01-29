@@ -355,6 +355,9 @@ async fn test_double_click_selection() {
     let click_x = 150.0;
     let click_y = 390.0;
 
+    // TODO We should have an RPC to wait for the server to come up
+    sleep(Duration::from_millis(200)).await; // Wait for the server to come up??
+
     // Click 1
     client
         .send_input_event(debug_server::debug_control::InputEventMsg {
@@ -400,6 +403,8 @@ async fn test_double_click_selection() {
         })
         .await
         .unwrap();
+
+    sleep(Duration::from_millis(200)).await; // Wait for event processing
 
     // State check immediate after Down?
     // Logic sets selection on Down for double click.
