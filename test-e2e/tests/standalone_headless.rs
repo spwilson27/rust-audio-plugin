@@ -1,33 +1,33 @@
+//! Standalone Headless Test
+//!
+//! Verifies that the standalone binary runs in headless mode and serves RPC.
+
 use anyhow::Result;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::time::Duration;
 
 #[tokio::test]
-async fn test_standalone_headless_debug() -> Result<()> {
-    // 1. Spawn standalone --headless --debug-server
+async fn test_standalone_headless() -> Result<()> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let root_dir = manifest_dir.parent().unwrap();
+    let _root_dir = manifest_dir.parent().unwrap();
 
-    testlib::cleanup_lockfiles()?;
-
-    println!("Spawning standalone headless debug...");
-    let mut child = Command::new("cargo")
-        .current_dir(root_dir)
-        .args([
+    println!("Starting standalone headless...");
+    // Use `test_e2e::ProcessGuard::spawn` manually to pass specific args
+    let mut child = test_e2e::ProcessGuard::spawn(
+        "cargo",
+        &[
             "run",
             "-p",
             "standalone",
             "--",
             "--headless",
             "--debug-server",
-        ])
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()?;
+        ],
+    )?;
 
-    // 2. Wait for RPC
-    let lockfile = match testlib::wait_for_lockfile(Duration::from_secs(10)).await {
+    // Wait for RPC
+    println!("Waiting for lockfile...");
+    let lockfile = match test_e2e::wait_for_lockfile(child.id(), Duration::from_secs(10)).await {
         Ok(l) => l,
         Err(e) => {
             let _ = child.kill();
@@ -35,10 +35,11 @@ async fn test_standalone_headless_debug() -> Result<()> {
         }
     };
 
-    let info = testlib::parse_lockfile(&lockfile)?;
-    println!("Connected on port {}", info.port);
+    let info = test_e2e::parse_lockfile(&lockfile)?;
+    println!("Combined lockfile check passed. Port: {}", info.port);
 
-    let mut client = match testlib::connect_rpc(info.port, Duration::from_secs(5)).await {
+    // Connect
+    let mut client = match test_e2e::connect_rpc(info.port, Duration::from_secs(5)).await {
         Ok(c) => c,
         Err(e) => {
             let _ = child.kill();
@@ -46,14 +47,14 @@ async fn test_standalone_headless_debug() -> Result<()> {
         }
     };
 
-    // 3. Send Quit
+    // Send Quit
     println!("Sending Quit...");
-    if let Err(e) = testlib::quit_standalone(&mut client).await {
+    if let Err(e) = test_e2e::quit_process(&mut client).await {
         let _ = child.kill();
         return Err(e);
     }
 
-    // 4. Verify exit
+    // We added wait() to ProcessGuard, so we can use it now.
     let status = child.wait()?;
     assert!(status.success(), "Standalone failed to exit cleanly");
 

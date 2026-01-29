@@ -2,100 +2,33 @@
 //!
 //! Verifies that widgets respond to input events and update their visual state.
 
-use debug_server::{DebugControlClient, Empty};
+use debug_server::Empty;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tokio::time::sleep;
-use tonic::transport::Endpoint;
-
-/// RAII wrapper to ensure child process is killed
-struct ProcessGuard(Child);
-
-impl ProcessGuard {
-    fn spawn(bin_path: &str, args: &[&str]) -> anyhow::Result<Self> {
-        let child = Command::new(bin_path)
-            .args(args)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()?;
-        Ok(Self(child))
-    }
-
-    fn id(&self) -> u32 {
-        self.0.id()
-    }
-
-    fn kill(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
-    }
-}
-
-impl Drop for ProcessGuard {
-    fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
-    }
-}
 
 #[tokio::test]
 async fn test_interactive_slider() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let root_dir = manifest_dir.parent().unwrap();
 
-    // Build test-e2e first
-    println!("Building test-e2e...");
-    let status = Command::new("cargo")
-        .current_dir(root_dir)
-        .args(["build", "-p", "test-e2e"])
-        .status()
-        .expect("Failed to build test-e2e");
-    assert!(status.success(), "Failed to build test-e2e");
-
-    // Start binary
+    // Start binary using library helper
     println!("Starting test-e2e...");
-    let mut child = ProcessGuard::spawn(
-        root_dir.join("target/debug/test-e2e").to_str().unwrap(),
-        &["--mode", "widgets", "--fixed-fps"],
-    )
-    .expect("Failed to start test-e2e");
+    let mut child =
+        test_e2e::spawn_test_e2e(root_dir, "widgets").expect("Failed to start test-e2e");
 
-    // Wait for RPC server to start (lockfile)
-    let pid = child.id();
-    let temp_dir = std::env::temp_dir();
-    let lockfile_path = temp_dir.join(format!("test_e2e_pid_{}.json", pid));
+    // Wait for RPC server (lockfile)
+    let lockfile_path = test_e2e::wait_for_lockfile(child.id(), Duration::from_secs(10))
+        .await
+        .expect("Timeout waiting for lockfile");
 
-    println!("Waiting for lockfile at: {}", lockfile_path.display());
-    let mut port = 0;
-    for _ in 0..100 {
-        if lockfile_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&lockfile_path) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(p) = json.get("port").and_then(|v| v.as_u64()) {
-                        port = p as u16;
-                        break;
-                    }
-                }
-            }
-        }
-        sleep(Duration::from_millis(100)).await;
-    }
+    let info = test_e2e::parse_lockfile(&lockfile_path).expect("Failed to parse lockfile");
+    println!("RPC port found: {}", info.port);
 
-    assert!(port > 0, "Failed to find RPC port");
-    println!("RPC port found: {}", port);
-
-    // Connect RPC client with increased limits
-    let addr = format!("http://127.0.0.1:{}", port);
-    let channel = Endpoint::from_shared(addr)
-        .expect("Invalid URI")
-        .connect()
+    // Connect RPC client
+    let mut client = test_e2e::connect_rpc(info.port, Duration::from_secs(5))
         .await
         .expect("Failed to connect to RPC server");
-
-    let mut client = DebugControlClient::new(channel)
-        .max_decoding_message_size(16 * 1024 * 1024)
-        .max_encoding_message_size(16 * 1024 * 1024);
 
     println!("Connected to RPC server");
 
@@ -254,7 +187,7 @@ async fn test_interactive_slider() {
         })
         .await;
 
-    child.kill();
+    child.kill().ok();
 }
 
 #[tokio::test]
@@ -263,36 +196,17 @@ async fn test_drag_capture() {
     let root_dir = manifest_dir.parent().unwrap();
 
     // Start binary
-    let mut child = ProcessGuard::spawn(
-        root_dir.join("target/debug/test-e2e").to_str().unwrap(),
-        &["--mode", "widgets", "--fixed-fps"],
-    )
-    .expect("Failed to start test-e2e");
-
-    // Connect to RPC (reusing logic from above would be better but keeping it simple)
-    let pid = child.id();
-    let temp_dir = std::env::temp_dir();
-    let lockfile_path = temp_dir.join(format!("test_e2e_pid_{}.json", pid));
+    let mut child =
+        test_e2e::spawn_test_e2e(root_dir, "widgets").expect("Failed to start test-e2e");
 
     // Wait for start...
-    let mut port = 0;
-    for _ in 0..100 {
-        if lockfile_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&lockfile_path) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(p) = json.get("port").and_then(|v| v.as_u64()) {
-                        port = p as u16;
-                        break;
-                    }
-                }
-            }
-        }
-        sleep(Duration::from_millis(200)).await;
-    }
-    assert!(port > 0, "Failed to find RPC port");
+    let lockfile_path = test_e2e::wait_for_lockfile(child.id(), Duration::from_secs(10))
+        .await
+        .expect("Timeout waiting for lockfile");
 
-    let addr = format!("http://127.0.0.1:{}", port);
-    let mut client = DebugControlClient::connect(addr)
+    let info = test_e2e::parse_lockfile(&lockfile_path).expect("Failed to parse lockfile");
+
+    let mut client = test_e2e::connect_rpc(info.port, Duration::from_secs(5))
         .await
         .expect("Failed to connect");
 
@@ -454,5 +368,5 @@ async fn test_drag_capture() {
         })
         .await;
 
-    child.kill();
+    child.kill().ok();
 }

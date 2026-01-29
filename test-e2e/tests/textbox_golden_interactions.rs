@@ -16,14 +16,15 @@ async fn test_textbox_interactions_golden() {
     std::fs::create_dir_all(&goldens_dir).unwrap();
 
     // 1. Start App
-    let mut child = testlib::spawn_test_e2e(root_dir, "text-resize").expect("Failed to start app");
+    let mut child = test_e2e::spawn_test_e2e(root_dir, "text-resize").expect("Failed to start app");
 
     // Connect RPC
-    let lockfile_path = testlib::wait_for_lockfile(Duration::from_secs(10))
+    let lockfile_path = test_e2e::wait_for_lockfile(child.id(), Duration::from_secs(10))
         .await
         .expect("Lockfile timeout");
-    let info = testlib::parse_lockfile(&lockfile_path).expect("Failed to parse lockfile");
-    let mut client = testlib::connect_rpc(info.port, Duration::from_secs(5))
+
+    let info = test_e2e::parse_lockfile(&lockfile_path).expect("Failed to parse lockfile");
+    let mut client = test_e2e::connect_rpc(info.port, Duration::from_secs(5))
         .await
         .expect("RPC connection failed");
 
@@ -33,10 +34,10 @@ async fn test_textbox_interactions_golden() {
     // --- SNAPSHOT 1: Initial ---
     {
         println!("Capturing Initial State...");
-        let img = testlib::capture_screenshot(&mut client)
+        let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        testlib::verify_golden(&img, &goldens_dir.join("textbox_1_initial.png"));
+        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_1_initial.png"));
     }
 
     // --- Interaction: Click to Focus ---
@@ -75,10 +76,10 @@ async fn test_textbox_interactions_golden() {
     // --- SNAPSHOT 2: Focused ---
     {
         println!("Capturing Focused State...");
-        let img = testlib::capture_screenshot(&mut client)
+        let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        testlib::verify_golden(&img, &goldens_dir.join("textbox_2_focused.png"));
+        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_2_focused.png"));
     }
 
     // --- Interaction: Type " 123" ---
@@ -104,10 +105,10 @@ async fn test_textbox_interactions_golden() {
     // --- SNAPSHOT 3: Typed ---
     {
         println!("Capturing Typed State...");
-        let img = testlib::capture_screenshot(&mut client)
+        let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        testlib::verify_golden(&img, &goldens_dir.join("textbox_3_typed.png"));
+        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_3_typed.png"));
     }
 
     // --- Interaction: Drag Select "Test" ---
@@ -165,10 +166,10 @@ async fn test_textbox_interactions_golden() {
     // --- SNAPSHOT 4: Selected ---
     {
         println!("Capturing Selected State...");
-        let img = testlib::capture_screenshot(&mut client)
+        let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        testlib::verify_golden(&img, &goldens_dir.join("textbox_4_selected.png"));
+        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_4_selected.png"));
     }
 
     // --- Interaction: Backspace (Delete Selection) ---
@@ -204,13 +205,13 @@ async fn test_textbox_interactions_golden() {
     // --- SNAPSHOT 5: Edited ---
     {
         println!("Capturing Edited State...");
-        let img = testlib::capture_screenshot(&mut client)
+        let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        testlib::verify_golden(&img, &goldens_dir.join("textbox_5_edited.png"));
+        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_5_edited.png"));
     }
 
     // Cleanup
-    testlib::quit_standalone(&mut client).await.ok();
-    let _ = child.wait();
+    test_e2e::quit_process(&mut client).await.ok();
+    child.kill().ok();
 }

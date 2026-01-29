@@ -3,31 +3,42 @@
 //! Verifies that all 4 widgets render correctly with text
 
 use std::path::PathBuf;
-use std::process::Command;
+use std::time::Duration;
+use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_widget_showcase_golden() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let root_dir = manifest_dir.parent().unwrap();
+    let goldens_dir = manifest_dir.join("goldens");
+    std::fs::create_dir_all(&goldens_dir).unwrap();
 
-    // Path to golden image
-    let golden_path = manifest_dir.join("goldens/widgets_showcase.png");
+    // Start App
+    let mut child = test_e2e::spawn_test_e2e(root_dir, "widgets").expect("Failed to start app");
 
-    println!("Verifying against golden: {}", golden_path.display());
-
-    // Build test-e2e
-    let status = Command::new("cargo")
-        .current_dir(root_dir)
-        .args(["build", "-p", "test-e2e"])
-        .status()
-        .expect("Failed to build test-e2e");
-    assert!(status.success());
-
-    // Capture via testlib
-    let img = testlib::capture_test_e2e_golden(root_dir, "widgets")
+    // Connect RPC
+    let lockfile_path = test_e2e::wait_for_lockfile(child.id(), Duration::from_secs(10))
         .await
-        .expect("Failed to capture golden");
+        .expect("Lockfile timeout");
 
-    // Verify against golden
-    testlib::verify_golden(&img, &golden_path);
+    let info = test_e2e::parse_lockfile(&lockfile_path).expect("Failed to parse lockfile");
+    let mut client = test_e2e::connect_rpc(info.port, Duration::from_secs(5))
+        .await
+        .expect("RPC connection failed");
+
+    // Wait for render
+    sleep(Duration::from_millis(500)).await;
+
+    // Capture
+    println!("Capturing Widget Showcase...");
+    let img = test_e2e::capture_screenshot(&mut client)
+        .await
+        .expect("Capture failed");
+
+    // Verify
+    test_e2e::verify_golden(&img, &goldens_dir.join("widgets_showcase.png"));
+
+    // Cleanup
+    test_e2e::quit_process(&mut client).await.ok();
+    child.kill().ok();
 }

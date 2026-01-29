@@ -1,13 +1,14 @@
-//! Test utilities for the splug audio plugin
+//! Test helpers for splitting E2E binary and shared test logic
 //!
-//! Provides shared functionality for integration tests and build tools.
+//! Exposes `ProcessGuard` and helper functions for spawning test processes and
+//! interacting with them via RPC.
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-/// Information parsed from the standalone lockfile
+/// Information parsed from the lockfile
 #[derive(Debug)]
 pub struct LockfileInfo {
     pub port: u16,
@@ -18,6 +19,42 @@ pub struct LockfileInfo {
 struct JsonLock {
     port: u16,
     pid: u32,
+}
+
+/// RAII wrapper to ensure child process is killed on drop
+pub struct ProcessGuard(pub Child);
+
+impl ProcessGuard {
+    pub fn spawn(bin_path: &str, args: &[&str]) -> Result<Self> {
+        let child = Command::new(bin_path)
+            .args(args)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .context("Failed to spawn process")?;
+        Ok(Self(child))
+    }
+
+    pub fn id(&self) -> u32 {
+        self.0.id()
+    }
+
+    pub fn kill(&mut self) -> Result<()> {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+        Ok(())
+    }
+
+    pub fn wait(&mut self) -> Result<std::process::ExitStatus> {
+        self.0.wait().context("Failed to wait on child")
+    }
+}
+
+impl Drop for ProcessGuard {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
 }
 
 /// Clean up old lockfiles from previous runs
@@ -38,56 +75,70 @@ pub fn cleanup_lockfiles() -> Result<()> {
     Ok(())
 }
 
-/// Spawn standalone process in background with fixed FPS
-pub fn spawn_standalone(root_dir: &Path) -> Result<Child> {
-    Command::new("cargo")
+/// Spawn test-e2e process in background with specified mode
+pub fn spawn_test_e2e(root_dir: &Path, mode: &str) -> Result<ProcessGuard> {
+    cleanup_lockfiles()?;
+
+    // We use "cargo run" which spawns the actual binary.
+    // Note: Cargo itself spawns a child. If we kill cargo, the child might persist unless we handle signals.
+    // For E2E tests, usually it's better to build first then spawn binary directly if possible,
+    // but `cargo run` is convenient for dev.
+    // `ProcessGuard` will kill `cargo`, which *should* propagate or at least we hope so.
+    // Ideally we build the binary and run it directly.
+
+    // For now, mirroring `testlib` behavior but wrapping in ProcessGuard.
+    let child = Command::new("cargo")
         .current_dir(root_dir)
-        .args(["run", "-p", "standalone", "--", "--fixed-fps"])
+        .args(["run", "-p", "test-e2e", "--", "--mode", mode])
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
-        .context("Failed to spawn standalone")
+        .context("Failed to spawn test-e2e")?;
+
+    Ok(ProcessGuard(child))
+}
+
+/// Spawn standalone process in background with fixed FPS
+/// Spawn standalone process in background with specified arguments
+pub fn spawn_standalone(root_dir: &Path, args: &[&str]) -> Result<ProcessGuard> {
+    let mut cmd = Command::new("cargo");
+    cmd.current_dir(root_dir)
+        .args(["run", "-p", "standalone", "--"]);
+
+    cmd.args(args);
+
+    let child = cmd
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .context("Failed to spawn standalone")?;
+
+    Ok(ProcessGuard(child))
 }
 
 /// Wait for lockfile to appear and return its path
-pub async fn wait_for_lockfile(timeout: Duration) -> Result<PathBuf> {
+pub async fn wait_for_lockfile(pid: u32, timeout: Duration) -> Result<PathBuf> {
     let start = Instant::now();
     let temp_dir = std::env::temp_dir();
+    // Match specific PID lockfiles for splug (standalone) or test-e2e
+    let patterns = [
+        format!("splug_pid_{}.json", pid),
+        format!("test_e2e_pid_{}.json", pid),
+    ];
 
     loop {
         if start.elapsed() > timeout {
-            anyhow::bail!("Timeout waiting for lockfile");
+            anyhow::bail!("Timeout waiting for lockfile for PID {}", pid);
         }
 
-        let mut recent_file = None;
-        let mut recent_time = std::time::SystemTime::UNIX_EPOCH;
-
-        if let Ok(entries) = std::fs::read_dir(&temp_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    // Look for both splug_pid and test_e2e_pid lockfiles
-                    if (name.starts_with("splug_pid_") || name.starts_with("test_e2e_pid_"))
-                        && name.ends_with(".json")
-                    {
-                        if let Ok(metadata) = std::fs::metadata(&path) {
-                            if let Ok(created) = metadata.created() {
-                                if created > recent_time {
-                                    recent_time = created;
-                                    recent_file = Some(path);
-                                }
-                            }
-                        }
-                    }
-                }
+        for name in &patterns {
+            let path = temp_dir.join(name);
+            if path.exists() {
+                return Ok(path);
             }
         }
 
-        if let Some(path) = recent_file {
-            return Ok(path);
-        }
-
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 
@@ -134,7 +185,7 @@ pub async fn connect_rpc(
     }
 }
 
-/// Capture screenshot from standalone via RPC
+/// Capture screenshot from process via RPC
 pub async fn capture_screenshot(
     client: &mut debug_server::DebugControlClient<tonic::transport::Channel>,
 ) -> Result<image::RgbaImage> {
@@ -144,25 +195,18 @@ pub async fn capture_screenshot(
         .context("RPC capture failed")?;
     let inner = response.into_inner();
 
-    println!(
-        "Received screenshot: {}x{} ({} bytes)",
-        inner.width,
-        inner.height,
-        inner.data.len()
-    );
-
     image::RgbaImage::from_raw(inner.width, inner.height, inner.data)
         .context("Failed to create image buffer")
 }
 
-/// Send quit command to standalone via RPC
-pub async fn quit_standalone(
+/// Send quit command via RPC
+pub async fn quit_process(
     client: &mut debug_server::DebugControlClient<tonic::transport::Channel>,
 ) -> Result<()> {
     client
-        .send_input_event(debug_server::InputEventMsg {
+        .send_input_event(debug_server::debug_control::InputEventMsg {
             event: Some(debug_server::debug_control::input_event_msg::Event::Quit(
-                debug_server::QuitMsg {},
+                debug_server::debug_control::QuitMsg {},
             )),
         })
         .await
@@ -170,59 +214,7 @@ pub async fn quit_standalone(
     Ok(())
 }
 
-/// Complete workflow: spawn standalone, capture screenshot, and quit
-pub async fn capture_golden(root_dir: &Path) -> Result<image::RgbaImage> {
-    cleanup_lockfiles()?;
-
-    println!("Starting standalone in background...");
-    let mut child = spawn_standalone(root_dir)?;
-
-    println!("Waiting for RPC server...");
-    let lockfile_path = wait_for_lockfile(Duration::from_secs(10)).await?;
-    let info = parse_lockfile(&lockfile_path)?;
-
-    println!(
-        "Connected to standalone on port {} (PID {})",
-        info.port, info.pid
-    );
-
-    let mut client = connect_rpc(info.port, Duration::from_secs(5)).await?;
-
-    // Wait for rendering to stabilize
-    tokio::time::sleep(Duration::from_millis(1000)).await;
-
-    println!("Requesting screenshot...");
-    let img = capture_screenshot(&mut client).await?;
-
-    println!("Sending Quit command...");
-    quit_standalone(&mut client).await?;
-
-    // Wait for child to exit
-    let _ = child.wait();
-
-    Ok(img)
-}
-
-/// Spawn test-e2e process in background with specified mode
-pub fn spawn_test_e2e(root_dir: &Path, mode: &str) -> Result<Child> {
-    cleanup_lockfiles()?;
-    Command::new("cargo")
-        .current_dir(root_dir)
-        .args(["run", "-p", "test-e2e", "--", "--mode", mode])
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .context("Failed to spawn test-e2e")
-}
-
 /// Verify an actual image against a golden reference.
-///
-/// If they match, does nothing.
-/// If they differ or golden is missing:
-/// 1. Saves actual image to `target/golden_updates/<filename>`
-/// 2. Prints helpful comparison links
-/// 3. Prints `cp` command to update golden
-/// 4. Panics
 pub fn verify_golden(actual_img: &image::RgbaImage, golden_path: &Path) {
     // Determine platform suffix
     let suffix = if cfg!(target_os = "macos") {
@@ -346,35 +338,4 @@ pub fn verify_golden(actual_img: &image::RgbaImage, golden_path: &Path) {
             golden_path.display()
         );
     }
-}
-
-/// Complete workflow: spawn test-e2e with mode, capture screenshot, and quit
-pub async fn capture_test_e2e_golden(root_dir: &Path, mode: &str) -> Result<image::RgbaImage> {
-    println!("Starting test-e2e in {} mode...", mode);
-    let mut child = spawn_test_e2e(root_dir, mode)?;
-
-    println!("Waiting for RPC server...");
-    let lockfile_path = wait_for_lockfile(Duration::from_secs(10)).await?;
-    let info = parse_lockfile(&lockfile_path)?;
-
-    println!(
-        "Connected to test-e2e on port {} (PID {})",
-        info.port, info.pid
-    );
-
-    let mut client = connect_rpc(info.port, Duration::from_secs(5)).await?;
-
-    // Wait for rendering to stabilize
-    tokio::time::sleep(Duration::from_millis(1000)).await;
-
-    println!("Requesting screenshot...");
-    let img = capture_screenshot(&mut client).await?;
-
-    println!("Sending Quit command...");
-    quit_standalone(&mut client).await?;
-
-    // Wait for child to exit
-    let _ = child.wait();
-
-    Ok(img)
 }

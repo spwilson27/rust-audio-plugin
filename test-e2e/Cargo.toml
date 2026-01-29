@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[lib]
+name = "test_e2e"
+path = "src/lib.rs"
+
 [[bin]]
 name = "test-e2e"
 path = "src/main.rs"
@@ -20,6 +24,13 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 raw-window-handle.workspace = true
 
+# Dependencies moved from dev-dependencies for library usage
+tokio = { version = "1.0", features = ["full"] }
+image.workspace = true
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tonic = "0.12"
+
 # Platform-specific dependencies
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"
@@ -27,8 +38,5 @@ objc2-foundation = { version = "0.2", features = ["NSString"] }
 objc2-app-kit = { version = "0.2", features = ["NSApplication", "NSWindow"] }
 
 [dev-dependencies]
-tokio = { version = "1.0", features = ["full"] }
-testlib = { path = "../testlib" }
-image.workspace = true
-serde_json = "1.0"
-tonic = "0.12"
+# testlib = { path = "../testlib" } # Removed
+

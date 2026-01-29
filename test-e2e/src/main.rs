@@ -57,7 +57,46 @@ fn main() -> Result<()> {
     match args.mode.as_str() {
         "widgets" => run_app(&args, setup_widget_showcase()),
         "text-resize" => run_app(&args, setup_text_widgets()),
+        "headless" => run_headless(),
         _ => anyhow::bail!("Unknown mode: {}", args.mode),
+    }
+}
+
+fn run_headless() -> Result<()> {
+    tracing::info!("Running in headless mode...");
+    let pid = std::process::id();
+    let temp_dir = std::env::temp_dir();
+    let lockfile_path = temp_dir.join(format!("test_e2e_pid_{}.json", pid));
+
+    // Channel for RPC events
+    let (tx, rx) = crossbeam_channel::unbounded();
+
+    // Start RPC server
+    let _port = match debug_server::RpcServer::start(0, tx) {
+        Ok((port, _)) => {
+            tracing::info!("RPC Server started on port {}", port);
+            let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
+            std::fs::write(&lockfile_path, json).context("Failed to write lockfile")?;
+            port
+        }
+        Err(e) => anyhow::bail!("Failed to start RPC server: {}", e),
+    };
+
+    use pal::UIEvent;
+
+    tracing::info!("Press Ctrl+C to exit");
+
+    loop {
+        while let Ok(event) = rx.try_recv() {
+            if let UIEvent::Quit = event {
+                tracing::info!("Received Quit signal, exiting...");
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                // Clean up lockfile
+                let _ = std::fs::remove_file(&lockfile_path);
+                return Ok(());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
 

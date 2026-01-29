@@ -13,7 +13,7 @@ use std::time::Duration;
 fn test_vulkan_no_validation_errors() -> Result<()> {
     // Build the standalone binary first
     let build_status = Command::new("cargo")
-        .args(["build", "--bin", "standalone"])
+        .args(["build", "-p", "standalone", "--bin", "standalone"])
         .status()
         .context("Failed to build standalone")?;
 
@@ -21,7 +21,7 @@ fn test_vulkan_no_validation_errors() -> Result<()> {
 
     // Start standalone in the background
     let mut child = Command::new("cargo")
-        .args(["run", "--bin", "standalone"])
+        .args(["run", "-p", "standalone", "--bin", "standalone"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
