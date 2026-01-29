@@ -571,33 +571,26 @@ impl TextRenderer {
         let cy = y;
 
         for c in text.chars() {
-            // 1. Get UVs (mut borrow of atlas)
+            // 1. Get Metrics (immut borrow of atlas.font/cache)
+            // We need advancment even if no UVs
+            let metrics = atlas.font.metrics(c, size);
+
+            // 2. Get UVs (mut borrow of atlas)
+            // This might trigger rasterization which modifies atlas, so we do it after metrics?
+            // Wait, get_glyph_uv requires &mut atlas. metrics requires &font.
+            // Atlas owns font.
+            // But we can get metrics via atlas helper or just call atlas methods.
+            // Actually, we can get metrics from atlas.font but get_glyph_uv needs &mut atlas.
+            // The borrow checker might complain if we hold metrics (which is Copy) while calling get_glyph_uv?
+            // Metrics is Copy, so it's fine.
+
             let uvs_opt = atlas.get_glyph_uv(context, c, size)?;
 
             if let Some((uv_min, uv_max)) = uvs_opt {
-                // 2. Get Metrics (immut borrow of atlas.font)
-                // We need to re-borrow atlas here.
-                // Since get_glyph_uv is finished, we can borrow atlas again.
-                let metrics = atlas.font.metrics(c, size);
-
                 let w = metrics.width as f32;
                 let h = metrics.height as f32;
 
                 // Standard Top-Left origin logic with Y-down:
-                // Baseline is not easily known without Layout.
-                // fontdue bounds are relative to origin.
-                // "xmin is the left side bearing"
-                // "ymin is the bottom side bearing" (positive y is up in fontdue)
-                // "height" is height of bounding box.
-
-                // Render at baseline (cy)
-                // In Y-down system:
-                // Top of glyph = cy - (height + ymin)
-                // This assumes ymin is distance from baseline to bottom of glyph (positive up).
-                // e.g. for 'g', ymin might be negative.
-                // If ymin = -5, height = 20. Top = cy - (20 + (-5)) = cy - 15.
-                // Bottom = cy - (-5) = cy + 5.
-
                 let top = cy - (metrics.ymin as f32 + metrics.height as f32);
                 let box_x = cx + metrics.xmin as f32;
                 let box_y = top;
@@ -605,9 +598,10 @@ impl TextRenderer {
                 let box_h = h;
 
                 self.push_quad(box_x, box_y, box_w, box_h, uv_min, uv_max, color);
-
-                cx += metrics.advance_width;
             }
+
+            // ALWAYS advance
+            cx += metrics.advance_width;
         }
 
         Ok(())
