@@ -1,14 +1,12 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+pub mod buffer;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub use buffer::{AudioBuffer, AudioBufferMut};
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod context;
+pub use context::{ProcessConfig, ProcessContext, Transport};
+
+pub mod events;
+pub use events::{Event, MidiEvent, NoteOffEvent, NoteOnEvent, ParamChangeEvent};
+
+pub mod processor;
+pub use processor::AudioProcessor;
