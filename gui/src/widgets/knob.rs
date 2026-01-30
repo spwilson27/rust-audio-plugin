@@ -261,9 +261,13 @@ impl Widget for Knob {
     }
 
     fn set_position(&mut self, x: f32, y: f32) {
-        let radius = self.radius();
-        self.bounds.x = x - radius;
-        self.bounds.y = y - radius;
+        self.bounds.x = x;
+        self.bounds.y = y;
+    }
+
+    fn set_size(&mut self, width: f32, height: f32) {
+        self.bounds.width = width;
+        self.bounds.height = height;
     }
 
     fn is_focused(&self) -> bool {

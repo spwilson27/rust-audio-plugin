@@ -22,6 +22,8 @@ use anyhow::Result;
 mod event_router;
 pub use event_router::EventRouter;
 
+pub mod audio;
+
 /// UI Event types for input handling
 #[derive(Debug, Clone)] // Removed Copy and PartialEq due to Sender
 pub enum UIEvent {

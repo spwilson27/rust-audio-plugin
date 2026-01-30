@@ -9,13 +9,17 @@
 pub mod button;
 pub mod container;
 pub mod knob;
+pub mod label;
 pub mod layout;
+pub mod selector;
 pub mod slider;
 pub mod textbox;
 pub mod widget_id;
 
 pub use button::Button;
 pub use knob::Knob;
+pub use label::Label;
+pub use selector::Selector;
 pub use slider::Slider;
 pub use textbox::Textbox;
 pub use widget_id::WidgetId;
@@ -54,6 +58,9 @@ pub trait Widget: std::any::Any + Send {
 
     /// Set the position of this widget (top-left corner)
     fn set_position(&mut self, x: f32, y: f32);
+
+    /// Set the size of this widget
+    fn set_size(&mut self, width: f32, height: f32);
 
     /// Check if this widget currently has focus
     fn is_focused(&self) -> bool;

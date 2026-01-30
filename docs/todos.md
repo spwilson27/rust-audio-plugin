@@ -1,10 +1,22 @@
 
 # TODOs
 
-- Continue with implementing the tart-based macos test infrastructure to isolate windows from impacting the host
+- Start creating the native audio support for standalone version
+  - We should have a user interface that is capable of selecting the audio input and output devices.
+    - We need to be able to list audio input and output devices using the PAL.
+    - We need to be able to select audio input and output devices using the PAL and route them to the audio engine.
+    - We need an abstraction for the audio engine which supports connecting to either the VST3/CLAP host or a PAL audio device.
+      - We need to develop a generic host audio abstraction which can be used to connect to either the VST3/CLAP host or a PAL audio device.
+  - We should have a user interface that is capable of selecting the audio sample rate and buffer size.
+    - This interface can assume that the audio engine is connected to a PAL audio device, not a VST3/CLAP host. (The host will set the sample rate, buffer size, and number of input/output devices).
+    - The interface will need to be able to communicate with the audio engine to get the current sample rate and buffer size.
+    - The interface will need to be able to communicate with the audio engine to set the sample rate and buffer size.
+    - The interface will need to communicate with the PAL to get/set the current sample rate and buffer size.
+Verification:
 
-- Update documentation to specify that we are specifically building a framework for rust-based audio plugins and standalone applications.
-  - We should create an example directory with a project that demonstrates the framework, and can be used as a template for new projects.
-  - We should create a new crate for the example project.
-  - We should add a section to the documentation that explains how to use the framework to create a new plugin and/or standalone application.
-  - We should provide a template for creating a new plugin and/or standalone application.
+- We should write E2E tests using the test-e2e application. Test the following:
+  - Generate goldens navigating the Input/Output device selection screen.
+  - Generate goldens navigating the Sample Rate/Buffer Size selection screen.
+  - Validate input/output selection suceeds and fails gracefully.
+  - Validate sample rate/buffer size selection suceeds and fails gracefully.
+  - Validate that the audio engine is connected to the audio device and that audio is being processed.

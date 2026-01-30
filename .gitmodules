@@ -1,0 +1,3 @@
+[submodule "extern/cpal"]
+	path = extern/cpal
+	url = https://github.com/RustAudio/cpal.git

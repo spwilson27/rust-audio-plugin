@@ -182,7 +182,7 @@ fn test(
             let pwd_str = pwd.to_str().context("Invalid path")?;
 
             // Construct the cargo nextest command to run inside docker
-            let mut test_cmd = String::from("cargo nextest run");
+            let mut test_cmd = String::from("cargo nextest run --no-fail-fast");
             if let Some(pkg) = package {
                 test_cmd.push_str(&format!(" -p {}", pkg));
             } else {
@@ -259,7 +259,10 @@ fn test(
             let ip = get_vm_ip(&vm_name)?;
             println!("  ✓ VM IP: {}", ip);
 
-            // 3. Sync Source to VM
+            // 3. Wait for SSH
+            wait_for_ssh(&ip)?;
+
+            // 4. Sync Source to VM
             println!("  Syncing source code to VM (rsync)...");
 
             // Remove symlink if it exists (legacy), but preserve dir for incremental builds if possible
@@ -287,6 +290,10 @@ fn test(
                 ".git",
                 "--exclude",
                 "target",
+                "--exclude",
+                "extern/*/target",
+                "--exclude",
+                "extern/*/.git",
                 "--exclude",
                 "node_modules",
                 "-e",
@@ -766,6 +773,39 @@ fn print_bundle_location(root: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn wait_for_ssh(ip: &str) -> Result<()> {
+    println!("  Waiting for SSH availability...");
+    let start = std::time::Instant::now();
+    while start.elapsed().as_secs() < 15 {
+        let status = Command::new("sshpass")
+            .args([
+                "-p",
+                "admin",
+                "ssh",
+                "-o",
+                "ConnectTimeout=1",
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                &format!("admin@{}", ip),
+                "exit 0",
+            ])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+
+        if let Ok(status) = status {
+            if status.success() {
+                println!("  ✓ SSH operational");
+                return Ok(());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    bail!("VM unresponsive to SSH (timed out after 15s)")
 }
 
 fn project_root() -> Result<PathBuf> {

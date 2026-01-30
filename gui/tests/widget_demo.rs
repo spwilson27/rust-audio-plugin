@@ -147,7 +147,7 @@ fn test_widget_demo_interactions() {
         button: 0,
     });
     println!("MouseUp results: {} events", results.len());
-    for result in &results {
+    for (_, result) in &results {
         if let EventResult::ValueChanged(value) = result {
             println!("  Button clicked! Value: {}", value);
         }
@@ -161,7 +161,7 @@ fn test_widget_demo_interactions() {
         button: 0,
     });
     let results = container.handle_ui_event(UIEvent::MouseMove { x: 200.0, y: 135.0 });
-    for result in &results {
+    for (_, result) in &results {
         if let EventResult::ValueChanged(value) = result {
             println!("  Slider value: {:.2}", value);
         }

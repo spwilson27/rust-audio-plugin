@@ -9,6 +9,7 @@ members = [
     "gui",
     "debug-server",
     "test-e2e",
+    "extern/cpal",
 ]
 
 [workspace.package]
@@ -26,9 +27,12 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 image = "0.24"
+cpal = { path = "extern/cpal" }
 
 [workspace.lints.rust]
 warnings = "deny"
+# Allow some warnings in cpal since it's external
+# (Actually workspace.lints apply to workspace members, we might need to be careful if cpal has warnings)
 
 [workspace.lints.clippy]
 all = "deny"

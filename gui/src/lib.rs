@@ -144,7 +144,10 @@ impl GuiContext {
     ///
     /// This routes events to the widget container, which handles hit testing,
     /// focus management, and event dispatch to individual widgets.
-    pub fn handle_event(&mut self, event: UIEvent) -> Result<Vec<widgets::EventResult>> {
+    pub fn handle_event(
+        &mut self,
+        event: UIEvent,
+    ) -> Result<Vec<(widgets::WidgetId, widgets::EventResult)>> {
         // Convert our UIEvent to pal::UIEvent for the widget container
         let pal_event = match event {
             UIEvent::MouseDown { x, y, button } => {

@@ -679,6 +679,11 @@ impl Widget for Textbox {
         self.bounds.y = y;
     }
 
+    fn set_size(&mut self, width: f32, height: f32) {
+        self.bounds.width = width;
+        self.bounds.height = height;
+    }
+
     fn is_focused(&self) -> bool {
         self.focused
     }

@@ -7,6 +7,7 @@ use clap::Parser;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // Import dependencies at crate level to avoid lookup issues
+mod audio;
 
 // WindowHandleWrapper to implement raw_window_handle traits for &dyn NativeWindow
 struct WindowHandleWrapper<'a>(&'a dyn pal::NativeWindow);
@@ -45,7 +46,8 @@ struct Args {
 
 fn main() -> Result<()> {
     // Initialize logging to file
-    let log_file = tracing_appender::rolling::never("target", "splug.log");
+    let log_dir = std::env::temp_dir();
+    let log_file = tracing_appender::rolling::never(&log_dir, "splug.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
 
     // File layer (no ANSI colors)
@@ -133,6 +135,7 @@ fn run_headless(args: &Args) -> Result<()> {
 fn run_with_gui(args: &Args) -> Result<()> {
     tracing::info!("Initializing window...");
 
+    use gui::widgets::Widget;
     use pal::{App, NativeWindow, UIEvent}; // Import traits
 
     // 1. Initialize Application via PAL
@@ -174,8 +177,26 @@ fn run_with_gui(args: &Args) -> Result<()> {
         let _ = app_tx_cb.send(event);
     });
 
+    // 3. Initialize Audio Engine
+    tracing::info!("Initializing Audio Engine...");
+    let mut audio_host = audio::StandaloneAudioHost::new().context("Failed to init audio host")?;
+
+    // Pick default output device
+    let backend = audio_host.get_backend();
+    let output_devices = backend.enumerate_output_devices();
+    if let Some(device) = output_devices.first() {
+        tracing::info!("Starting audio on device: {}", device.name);
+        // Use NoOpProcessor for now (silence)
+        let processor = audio_core::processor::NoOpProcessor;
+        audio_host
+            .start_audio(&device.name, 44100, 512, processor)
+            .context("Failed to start audio")?;
+    } else {
+        tracing::warn!("No output devices found!");
+    }
+
     // Optional: Debug Server
-    let _lockfile_guard = if args.debug_server {
+    let (_lockfile_guard, ready_notify) = if args.debug_server {
         use crossbeam_channel;
         let (tx, rx) = crossbeam_channel::unbounded();
 
@@ -187,26 +208,89 @@ fn run_with_gui(args: &Args) -> Result<()> {
         let lockfile_path = temp_dir.join(format!("splug_pid_{}.json", pid));
 
         match debug_server::RpcServer::start(0, tx) {
-            Ok((port, _)) => {
+            Ok((port, notify)) => {
                 tracing::info!("RPC Server started on port {}", port);
                 let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
                 if let Err(e) = std::fs::write(&lockfile_path, json) {
                     tracing::error!("Failed to write lockfile: {}", e);
-                    None
+                    (None, None)
                 } else {
-                    Some(lockfile_path)
+                    (Some(lockfile_path), Some(notify))
                 }
             }
             Err(e) => {
                 tracing::error!("Failed to start RPC server: {}", e);
-                None
+                (None, None)
             }
         }
     } else {
-        None
+        (None, None)
     };
 
     tracing::info!("Window opened");
+
+    // Signal app ready if debug server enabled
+    if let Some(notify) = ready_notify {
+        notify.notify_one();
+    }
+
+    // 4. Initialize UI
+    let mut widgets = gui::widgets::container::WidgetContainer::new();
+    let layout = gui::widgets::layout::FlexLayout::new(gui::widgets::layout::FlexDirection::Column)
+        .with_spacing(10.0)
+        .with_padding(20.0);
+    widgets.set_layout(Box::new(layout));
+
+    // Define Widgets
+    // Output Device
+    let output_devices = audio_host.get_backend().enumerate_output_devices();
+    let device_names: Vec<String> = output_devices.iter().map(|d| d.name.clone()).collect();
+
+    // Pick initial index
+    let initial_device_idx = if let Some(first) = output_devices.first() {
+        device_names
+            .iter()
+            .position(|n| n == &first.name)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
+    let mut device_selector = gui::widgets::Selector::new(0.0, 0.0, 300.0, 40.0);
+    device_selector.set_items(device_names.clone());
+    device_selector.set_selected_index(initial_device_idx);
+    let device_selector_id = Some(device_selector.id());
+    widgets.add_widget(Box::new(device_selector));
+
+    // Sample Rate
+    let sample_rates = vec![
+        "44100".to_string(),
+        "48000".to_string(),
+        "88200".to_string(),
+        "96000".to_string(),
+    ];
+    let mut sr_selector = gui::widgets::Selector::new(0.0, 0.0, 300.0, 40.0);
+    sr_selector.set_items(sample_rates.clone());
+    sr_selector.set_selected_index(0); // Default 44100
+    let sr_selector_id = Some(sr_selector.id());
+    widgets.add_widget(Box::new(sr_selector));
+
+    // Buffer Size
+    let buffer_sizes = vec![
+        "64".to_string(),
+        "128".to_string(),
+        "256".to_string(),
+        "512".to_string(),
+        "1024".to_string(),
+    ];
+    let mut buf_selector = gui::widgets::Selector::new(0.0, 0.0, 300.0, 40.0);
+    buf_selector.set_items(buffer_sizes.clone());
+    buf_selector.set_selected_index(3); // Default 512
+    let buf_selector_id = Some(buf_selector.id());
+    widgets.add_widget(Box::new(buf_selector));
+
+    // Layout
+    widgets.apply_layout(800.0, 600.0);
 
     let mut last_fps_print = std::time::Instant::now();
     let startup_time = std::time::Instant::now(); // Track startup time
@@ -230,14 +314,70 @@ fn run_with_gui(args: &Args) -> Result<()> {
                     tracing::info!("Handling Resize event: {}x{}", w, h);
                     if let Err(e) = window.set_size(w, h) {
                         tracing::error!("Failed to resize window: {}", e);
+                    } else {
+                        // Resize widget container
+                        if let Err(e) = renderer.resize(w, h) {
+                            tracing::error!("Failed to resize renderer: {}", e);
+                        }
+                        widgets.apply_layout(w as f32, h as f32);
                     }
                 }
-                _ => {}
+                // Forward other events to UI
+                evt => {
+                    let results = widgets.handle_ui_event(evt);
+                    for (id, result) in results {
+                        if let gui::widgets::EventResult::ValueChanged(_) = result {
+                            // Check if any selector changed
+                            if Some(id) == device_selector_id
+                                || Some(id) == sr_selector_id
+                                || Some(id) == buf_selector_id
+                            {
+                                // Helper to get selector string value
+                                let get_val =
+                                    |wid: Option<gui::widgets::WidgetId>| -> Option<String> {
+                                        wid.and_then(|id| {
+                                            widgets
+                                                .get_widget(id)
+                                                .and_then(|w| {
+                                                    w.as_any()
+                                                        .downcast_ref::<gui::widgets::Selector>()
+                                                })
+                                                .and_then(|s| s.selected_item())
+                                                .map(|s| s.to_string())
+                                        })
+                                    };
+
+                                if let (Some(device), Some(sr_str), Some(buf_str)) = (
+                                    get_val(device_selector_id),
+                                    get_val(sr_selector_id),
+                                    get_val(buf_selector_id),
+                                ) {
+                                    if let (Ok(sr), Ok(buf)) =
+                                        (sr_str.parse::<u32>(), buf_str.parse::<u32>())
+                                    {
+                                        tracing::info!(
+                                            "Restarting audio: Device={}, SR={}, Buf={}",
+                                            device,
+                                            sr,
+                                            buf
+                                        );
+                                        let processor = audio_core::processor::NoOpProcessor;
+                                        if let Err(e) =
+                                            audio_host.start_audio(&device, sr, buf, processor)
+                                        {
+                                            tracing::error!("Failed to restart audio: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        // Render frame
-        if let Err(e) = renderer.draw_frame(None) {
+        // Render framer
+        if let Err(e) = renderer.draw_frame(Some(&widgets)) {
             tracing::warn!("Render error: {}", e);
         }
 

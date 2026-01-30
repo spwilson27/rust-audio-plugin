@@ -106,8 +106,8 @@ impl WidgetContainer {
 
     /// Handle a UI event from the platform layer
     ///
-    /// Returns a vector of EventResults from all widgets that handled the event.
-    pub fn handle_ui_event(&mut self, event: UIEvent) -> Vec<EventResult> {
+    /// Returns a vector of (WidgetId, EventResult) from all widgets that handled the event.
+    pub fn handle_ui_event(&mut self, event: UIEvent) -> Vec<(WidgetId, EventResult)> {
         match event {
             UIEvent::MouseDown { x, y, button } => {
                 self.last_mouse_pos = (x, y);
@@ -128,7 +128,7 @@ impl WidgetContainer {
         }
     }
 
-    fn handle_mouse_down(&mut self, x: f64, y: f64, button: u32) -> Vec<EventResult> {
+    fn handle_mouse_down(&mut self, x: f64, y: f64, button: u32) -> Vec<(WidgetId, EventResult)> {
         let mut results = Vec::new();
 
         // Hit test to find widget under cursor
@@ -142,6 +142,7 @@ impl WidgetContainer {
             // Send event to widget
             let event = WidgetEvent::MouseDown { x, y, button };
             if let Some(widget) = self.widgets.get_mut(widget_index) {
+                let id = widget.id();
                 let result = widget.handle_event(&event);
 
                 // Check if widget wants to capture mouse
@@ -150,7 +151,7 @@ impl WidgetContainer {
                 }
 
                 if !matches!(result, EventResult::NotHandled) {
-                    results.push(result);
+                    results.push((id, result));
                 }
             }
         } else {
@@ -161,7 +162,7 @@ impl WidgetContainer {
         results
     }
 
-    fn handle_mouse_up(&mut self, x: f64, y: f64, button: u32) -> Vec<EventResult> {
+    fn handle_mouse_up(&mut self, x: f64, y: f64, button: u32) -> Vec<(WidgetId, EventResult)> {
         let mut results = Vec::new();
 
         // Send to captured widget first (if any), otherwise to hovered widget
@@ -170,9 +171,10 @@ impl WidgetContainer {
         if let Some(widget_index) = target_index {
             let event = WidgetEvent::MouseUp { x, y, button };
             if let Some(widget) = self.widgets.get_mut(widget_index) {
+                let id = widget.id();
                 let result = widget.handle_event(&event);
                 if !matches!(result, EventResult::NotHandled) {
-                    results.push(result);
+                    results.push((id, result));
                 }
             }
         }
@@ -183,16 +185,17 @@ impl WidgetContainer {
         results
     }
 
-    fn handle_mouse_move(&mut self, x: f64, y: f64) -> Vec<EventResult> {
+    fn handle_mouse_move(&mut self, x: f64, y: f64) -> Vec<(WidgetId, EventResult)> {
         let mut results = Vec::new();
 
         // PRIORITY 1: If a widget has captured the mouse, send all events to it
         if let Some(captured_index) = self.captured_index {
             let event = WidgetEvent::MouseMove { x, y };
             if let Some(widget) = self.widgets.get_mut(captured_index) {
+                let id = widget.id();
                 let result = widget.handle_event(&event);
                 if !matches!(result, EventResult::NotHandled) {
-                    results.push(result);
+                    results.push((id, result));
                 }
             }
             return results; // Don't update hover state while captured
@@ -224,9 +227,10 @@ impl WidgetContainer {
         if let Some(widget_index) = self.hovered_index {
             let event = WidgetEvent::MouseMove { x, y };
             if let Some(widget) = self.widgets.get_mut(widget_index) {
+                let id = widget.id();
                 let result = widget.handle_event(&event);
                 if !matches!(result, EventResult::NotHandled) {
-                    results.push(result);
+                    results.push((id, result));
                 }
             }
         }
@@ -234,7 +238,11 @@ impl WidgetContainer {
         results
     }
 
-    fn handle_key_down(&mut self, keycode: u32, modifiers: pal::Modifiers) -> Vec<EventResult> {
+    fn handle_key_down(
+        &mut self,
+        keycode: u32,
+        modifiers: pal::Modifiers,
+    ) -> Vec<(WidgetId, EventResult)> {
         let mut results = Vec::new();
 
         // Check for Tab (focus navigation)
@@ -253,9 +261,10 @@ impl WidgetContainer {
         if let Some(widget_index) = self.focused_index {
             let event = WidgetEvent::KeyDown { keycode, modifiers };
             if let Some(widget) = self.widgets.get_mut(widget_index) {
+                let id = widget.id();
                 let result = widget.handle_event(&event);
                 if !matches!(result, EventResult::NotHandled) {
-                    results.push(result);
+                    results.push((id, result));
                 }
             }
         }
@@ -263,16 +272,21 @@ impl WidgetContainer {
         results
     }
 
-    fn handle_key_up(&mut self, keycode: u32, modifiers: pal::Modifiers) -> Vec<EventResult> {
+    fn handle_key_up(
+        &mut self,
+        keycode: u32,
+        modifiers: pal::Modifiers,
+    ) -> Vec<(WidgetId, EventResult)> {
         let mut results = Vec::new();
 
         // Send to focused widget
         if let Some(widget_index) = self.focused_index {
             let event = WidgetEvent::KeyUp { keycode, modifiers };
             if let Some(widget) = self.widgets.get_mut(widget_index) {
+                let id = widget.id();
                 let result = widget.handle_event(&event);
                 if !matches!(result, EventResult::NotHandled) {
-                    results.push(result);
+                    results.push((id, result));
                 }
             }
         }
@@ -280,16 +294,17 @@ impl WidgetContainer {
         results
     }
 
-    fn handle_text_input(&mut self, text: String) -> Vec<EventResult> {
+    fn handle_text_input(&mut self, text: String) -> Vec<(WidgetId, EventResult)> {
         let mut results = Vec::new();
 
         // Send to focused widget
         if let Some(widget_index) = self.focused_index {
             let event = WidgetEvent::TextInput(text);
             if let Some(widget) = self.widgets.get_mut(widget_index) {
+                let id = widget.id();
                 let result = widget.handle_event(&event);
                 if !matches!(result, EventResult::NotHandled) {
-                    results.push(result);
+                    results.push((id, result));
                 }
             }
         }
@@ -506,6 +521,17 @@ mod tests {
         fn set_position(&mut self, x: f32, y: f32) {
             self.bounds.x = x;
             self.bounds.y = y;
+            // Re-apply layout when position changes? Layout usually relative to container?
+            // If layout computes absolute positions, yes.
+            // MockWidget does not have apply_layout, so this would cause a compile error.
+            // self.apply_layout(self.bounds.width, self.bounds.height);
+        }
+
+        fn set_size(&mut self, width: f32, height: f32) {
+            self.bounds.width = width;
+            self.bounds.height = height;
+            // MockWidget does not have apply_layout, so this would cause a compile error.
+            // self.apply_layout(width, height);
         }
 
         fn is_focused(&self) -> bool {
@@ -712,7 +738,7 @@ mod tests {
         let results = container.handle_ui_event(UIEvent::MouseMove { x: 25.0, y: 15.0 });
         let value_changed = results
             .iter()
-            .any(|r| matches!(r, EventResult::ValueChanged(_)));
+            .any(|(_, r)| matches!(r, EventResult::ValueChanged(_)));
         assert!(
             value_changed,
             "Should produce ValueChanged event on drag step 1"
@@ -722,7 +748,7 @@ mod tests {
         let results = container.handle_ui_event(UIEvent::MouseMove { x: 25.0, y: 5.0 });
         let value_changed = results
             .iter()
-            .any(|r| matches!(r, EventResult::ValueChanged(_)));
+            .any(|(_, r)| matches!(r, EventResult::ValueChanged(_)));
         assert!(
             value_changed,
             "Should produce ValueChanged event on drag step 2"

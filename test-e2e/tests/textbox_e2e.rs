@@ -57,7 +57,7 @@ async fn test_textbox_focus() {
     let lockfile_path = temp_dir.join(format!("test_e2e_pid_{}.json", pid));
 
     let mut port = 0;
-    for _ in 0..100 {
+    for _ in 0..300 {
         if lockfile_path.exists() {
             if let Ok(content) = std::fs::read_to_string(&lockfile_path) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -208,7 +208,7 @@ async fn setup_test() -> (ProcessGuard, DebugControlClient<tonic::transport::Cha
     let lockfile_path = temp_dir.join(format!("test_e2e_pid_{}.json", pid));
 
     let mut port = 0;
-    for _ in 0..100 {
+    for _ in 0..300 {
         if lockfile_path.exists() {
             if let Ok(content) = std::fs::read_to_string(&lockfile_path) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {

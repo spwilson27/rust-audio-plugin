@@ -650,6 +650,36 @@ impl Renderer {
                 .context("Failed to create RgbaImage from raw data")
         }
     }
+
+    /// Resize the renderer resources (swapchain and framebuffers)
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
+        unsafe {
+            let device = self.context.device();
+            device.device_wait_idle()?;
+
+            // 1. Destroy framebuffers
+            for framebuffer in &self.framebuffers {
+                device.destroy_framebuffer(*framebuffer, None);
+            }
+            self.framebuffers.clear();
+
+            // 2. Cleanup old swapchain
+            self.swapchain.cleanup(device);
+
+            // 3. Create new swapchain
+            self.swapchain = Swapchain::new(&self.context, width, height)?;
+
+            // 4. Recreate framebuffers
+            self.framebuffers =
+                Self::create_framebuffers(&self.context, &self.swapchain, self.render_pass)?;
+
+            // 5. Update dimensions
+            self.logical_width = width as f32;
+            self.logical_height = height as f32;
+
+            Ok(())
+        }
+    }
 }
 
 impl Drop for Renderer {

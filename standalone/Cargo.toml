@@ -12,8 +12,13 @@ workspace = true
 name = "standalone"
 path = "src/main.rs"
 
+[features]
+default = ["cpal"]
+cpal = ["pal/cpal"]
+
 [dependencies]
 anyhow.workspace = true
+audio-core = { path = "../audio-core" }
 gui = { path = "../gui" }
 clap = { version = "4.5", features = ["derive"] }
 debug-server = { path = "../debug-server" }
