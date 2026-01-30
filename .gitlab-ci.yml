@@ -1,0 +1,99 @@
+stages:
+  - lint
+  - test
+  - coverage
+
+# ---------------------------------------------------------------------------
+# GLOBAL DEFAULTS
+# ---------------------------------------------------------------------------
+default:
+  interruptible: true
+
+variables:
+  CARGO_TERM_COLOR: "always"
+
+# ---------------------------------------------------------------------------
+# JOB TEMPLATES (Anchors)
+# ---------------------------------------------------------------------------
+.rust-setup: &rust-setup
+  before_script:
+    - rustc --version
+    - cargo --version
+
+.linux-job:
+  image: rust:slim-bookworm
+  tags: [ "linux-docker" ] # Matches your Unraid Docker Runner
+  before_script:
+    - apt-get update && apt-get install -y libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libvulkan-dev mesa-vulkan-drivers vulkan-tools xvfb protobuf-compiler git curl
+    - curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/bin
+    - cargo install cargo-llvm-cov || true
+
+.windows-job:
+  tags: [ "windows-vm" ]   # Matches your Unraid Windows VM Runner
+  before_script:
+    - choco install protoc
+    - cargo install cargo-nextest
+    - cargo install cargo-llvm-cov
+
+.macos-job:
+  tags: [ "macos-mini" ]   # Matches your Mac Mini Runner
+  before_script:
+    - brew install protobuf
+    - cargo install cargo-nextest
+    - cargo install cargo-llvm-cov
+
+# ---------------------------------------------------------------------------
+# STAGE 1: LINT (Parallel)
+# ---------------------------------------------------------------------------
+lint:linux:
+  stage: lint
+  extends: .linux-job
+  script: cargo clippy --workspace --all-targets -- -D warnings
+
+lint:windows:
+  stage: lint
+  extends: .windows-job
+  script: cargo clippy --workspace --all-targets -- -D warnings
+
+lint:macos:
+  stage: lint
+  extends: .macos-job
+  script: cargo clippy --workspace --all-targets -- -D warnings
+
+# ---------------------------------------------------------------------------
+# STAGE 2: TEST (Parallel)
+# ---------------------------------------------------------------------------
+test:linux:
+  stage: test
+  extends: .linux-job
+  script:
+    - xvfb-run --auto-servernum cargo nextest run --workspace
+
+test:windows:
+  stage: test
+  extends: .windows-job
+  script: cargo nextest run --workspace
+
+test:macos:
+  stage: test
+  extends: .macos-job
+  script: cargo nextest run --workspace
+
+# ---------------------------------------------------------------------------
+# STAGE 3: COVERAGE (Parallel)
+# ---------------------------------------------------------------------------
+coverage:linux:
+  stage: coverage
+  extends: .linux-job
+  script:
+    - xvfb-run --auto-servernum cargo llvm-cov --workspace --summary-only
+
+coverage:windows:
+  stage: coverage
+  extends: .windows-job
+  script: cargo llvm-cov --workspace --summary-only
+
+coverage:macos:
+  stage: coverage
+  extends: .macos-job
+  script: cargo llvm-cov --workspace --summary-only
