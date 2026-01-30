@@ -308,13 +308,56 @@ impl Renderer {
 
             // Render widgets if available, otherwise render test pattern
             if let Some(widgets_ref) = widgets {
-                widgets_ref.render(
+                // 1. Render Base Content (Widgets)
+                widgets_ref.render_content(
                     &mut self.shape_renderer,
                     &mut self.text_renderer,
                     &self.context,
                     &mut self.font_atlas,
                     w as u32,
                     h as u32,
+                );
+
+                // Flush base content (Shapes then Text)
+                self.shape_renderer.record_commands(
+                    command_buffer,
+                    self.swapchain.extent().width,
+                    self.swapchain.extent().height,
+                    self.logical_width,
+                    self.logical_height,
+                );
+                self.text_renderer.record_commands(
+                    command_buffer,
+                    self.swapchain.extent().width,
+                    self.swapchain.extent().height,
+                    self.logical_width,
+                    self.logical_height,
+                );
+
+                // 2. Render Overlays
+                widgets_ref.render_overlays(
+                    &mut self.shape_renderer,
+                    &mut self.text_renderer,
+                    &self.context,
+                    &mut self.font_atlas,
+                    w as u32,
+                    h as u32,
+                );
+
+                // Flush overlays
+                self.shape_renderer.record_commands(
+                    command_buffer,
+                    self.swapchain.extent().width,
+                    self.swapchain.extent().height,
+                    self.logical_width,
+                    self.logical_height,
+                );
+                self.text_renderer.record_commands(
+                    command_buffer,
+                    self.swapchain.extent().width,
+                    self.swapchain.extent().height,
+                    self.logical_width,
+                    self.logical_height,
                 );
             } else {
                 // Test Pattern (fallback when no widgets set)
@@ -338,6 +381,21 @@ impl Renderer {
                 // Default Rect
                 self.shape_renderer
                     .draw_rect(50.0, 50.0, 100.0, 100.0, [1.0, 1.0, 0.0, 1.0], 0.0);
+
+                self.shape_renderer.record_commands(
+                    command_buffer,
+                    self.swapchain.extent().width,
+                    self.swapchain.extent().height,
+                    self.logical_width,
+                    self.logical_height,
+                );
+                self.text_renderer.record_commands(
+                    command_buffer,
+                    self.swapchain.extent().width,
+                    self.swapchain.extent().height,
+                    self.logical_width,
+                    self.logical_height,
+                );
             }
 
             // FPS Overlay (always show)
@@ -368,7 +426,7 @@ impl Renderer {
                 [1.0, 1.0, 1.0, 1.0],
             )?;
 
-            // Record all rendering commands
+            // Record all rendering commands (Flush FPS)
             self.shape_renderer.record_commands(
                 command_buffer,
                 self.swapchain.extent().width,

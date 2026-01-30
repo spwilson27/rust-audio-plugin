@@ -314,7 +314,16 @@ impl WidgetContainer {
 
     /// Hit test to find which widget contains the given point
     fn hit_test(&self, x: f64, y: f64) -> Option<usize> {
-        // Test in reverse order (last added = topmost)
+        // 1. Check overlays (drawn on top of all widgets)
+        for (index, widget) in self.widgets.iter().enumerate().rev() {
+            if let Some(rect) = widget.overlay_bounds() {
+                if rect.contains(x, y) {
+                    return Some(index);
+                }
+            }
+        }
+
+        // 2. Check main widget bounds
         for (index, widget) in self.widgets.iter().enumerate().rev() {
             if widget.bounds().contains(x, y) {
                 return Some(index);
@@ -404,8 +413,8 @@ impl WidgetContainer {
         }
     }
 
-    /// Render all widgets
-    pub fn render(
+    /// Render main widget content (no overlays)
+    pub fn render_content(
         &self,
         shape_renderer: &mut ShapeRenderer,
         text_renderer: &mut TextRenderer,
@@ -424,6 +433,58 @@ impl WidgetContainer {
                 screen_height,
             );
         }
+    }
+
+    /// Render only overlays
+    pub fn render_overlays(
+        &self,
+        shape_renderer: &mut ShapeRenderer,
+        text_renderer: &mut TextRenderer,
+        vulkan_context: &crate::VulkanContext,
+        font_atlas: &mut crate::vulkan::text_renderer::FontAtlas,
+        screen_width: u32,
+        screen_height: u32,
+    ) {
+        for widget in &self.widgets {
+            widget.render_overlay(
+                shape_renderer,
+                text_renderer,
+                vulkan_context,
+                font_atlas,
+                screen_width,
+                screen_height,
+            );
+        }
+    }
+
+    /// Render all widgets (content then overlays, in one batch)
+    /// Note: This might cause z-ordering issues if text is always drawn after shapes.
+    /// Prefer using render_content then render_overlays with flushes in between.
+    pub fn render(
+        &self,
+        shape_renderer: &mut ShapeRenderer,
+        text_renderer: &mut TextRenderer,
+        vulkan_context: &crate::VulkanContext,
+        font_atlas: &mut crate::vulkan::text_renderer::FontAtlas,
+        screen_width: u32,
+        screen_height: u32,
+    ) {
+        self.render_content(
+            shape_renderer,
+            text_renderer,
+            vulkan_context,
+            font_atlas,
+            screen_width,
+            screen_height,
+        );
+        self.render_overlays(
+            shape_renderer,
+            text_renderer,
+            vulkan_context,
+            font_atlas,
+            screen_width,
+            screen_height,
+        );
     }
 
     /// Get the number of widgets in this container

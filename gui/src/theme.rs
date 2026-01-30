@@ -10,7 +10,7 @@ pub mod colors {
     // Backgrounds
     pub const BACKGROUND_ROOT: Color = [0.05, 0.05, 0.05, 1.0]; // Deep black/gray
     pub const BACKGROUND_WIDGET: Color = [0.15, 0.15, 0.16, 1.0]; // Surface gray
-    pub const BACKGROUND_HOVER: Color = [0.20, 0.20, 0.22, 1.0]; // Lighter gray
+    pub const BACKGROUND_HOVER: Color = [0.25, 0.25, 0.27, 1.0]; // Lighter gray
     pub const BACKGROUND_PRESSED: Color = [0.10, 0.10, 0.11, 1.0]; // Darker gray
 
     // Accents

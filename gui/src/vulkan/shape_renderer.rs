@@ -28,6 +28,7 @@ pub struct ShapeRenderer {
     vertex_buffer: vk::Buffer,
     vertex_memory: vk::DeviceMemory,
     vertex_count: usize,
+    recorded_vertex_count: usize,
     max_vertex_count: usize,
     host_mapped_memory: *mut ShapeVertex,
 }
@@ -218,6 +219,7 @@ impl ShapeRenderer {
             vertex_buffer,
             vertex_memory,
             vertex_count: 0,
+            recorded_vertex_count: 0,
             max_vertex_count,
             host_mapped_memory,
         })
@@ -225,6 +227,7 @@ impl ShapeRenderer {
 
     pub fn begin(&mut self) {
         self.vertex_count = 0;
+        self.recorded_vertex_count = 0;
     }
 
     pub fn draw_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4], radius: f32) {
@@ -305,14 +308,15 @@ impl ShapeRenderer {
     }
 
     pub fn record_commands(
-        &self,
+        &mut self,
         command_buffer: vk::CommandBuffer,
         viewport_width: u32,
         viewport_height: u32,
         logical_width: f32,
         logical_height: f32,
     ) {
-        if self.vertex_count == 0 {
+        let count = self.vertex_count - self.recorded_vertex_count;
+        if count == 0 {
             return;
         }
 
@@ -365,9 +369,16 @@ impl ShapeRenderer {
             self.device
                 .cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &offsets);
 
-            self.device
-                .cmd_draw(command_buffer, self.vertex_count as u32, 1, 0, 0);
+            self.device.cmd_draw(
+                command_buffer,
+                count as u32,
+                1,
+                self.recorded_vertex_count as u32,
+                0,
+            );
         }
+
+        self.recorded_vertex_count = self.vertex_count;
     }
 }
 

@@ -130,6 +130,23 @@ pub fn spawn_standalone(root_dir: &Path, args: &[&str]) -> Result<ProcessGuard> 
     Ok(ProcessGuard(child))
 }
 
+/// Spawn standalone example in background
+pub fn spawn_example(root_dir: &Path, example: &str, args: &[&str]) -> Result<ProcessGuard> {
+    let mut cmd = Command::new("cargo");
+    cmd.current_dir(root_dir)
+        .args(["run", "-p", "standalone", "--example", example, "--"]);
+
+    cmd.args(args);
+
+    let child = cmd
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .context("Failed to spawn example")?;
+
+    Ok(ProcessGuard(child))
+}
+
 /// Wait for lockfile to appear and return its path
 pub async fn wait_for_lockfile(pid: u32, timeout: Duration) -> Result<PathBuf> {
     let start = Instant::now();

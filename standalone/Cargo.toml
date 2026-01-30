@@ -8,9 +8,13 @@ license.workspace = true
 [lints]
 workspace = true
 
+[lib]
+name = "standalone"
+path = "src/lib.rs"
+
 [[bin]]
 name = "standalone"
-path = "src/main.rs"
+path = "src/bin/standalone.rs"
 
 [features]
 default = ["cpal"]

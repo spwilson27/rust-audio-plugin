@@ -8,6 +8,7 @@
 //! - Automated testing via RPC event
 pub mod button;
 pub mod container;
+pub mod dropdown;
 pub mod knob;
 pub mod label;
 pub mod layout;
@@ -17,6 +18,7 @@ pub mod textbox;
 pub mod widget_id;
 
 pub use button::Button;
+pub use dropdown::Dropdown;
 pub use knob::Knob;
 pub use label::Label;
 pub use selector::Selector;
@@ -52,6 +54,24 @@ pub trait Widget: std::any::Any + Send {
         screen_width: u32,
         screen_height: u32,
     );
+
+    /// Render overlay elements (popups, tooltips) that should appear above all other widgets
+    fn render_overlay(
+        &self,
+        _shape_renderer: &mut ShapeRenderer,
+        _text_renderer: &mut TextRenderer,
+        _vulkan_context: &super::VulkanContext,
+        _font_atlas: &mut super::vulkan::text_renderer::FontAtlas,
+        _screen_width: u32,
+        _screen_height: u32,
+    ) {
+    }
+
+    /// Get the bounding rectangle of the overlay, if any
+    /// This is used for hit testing to interpret clicks on the overlay
+    fn overlay_bounds(&self) -> Option<Rect> {
+        None
+    }
 
     /// Get the bounding rectangle of this widget
     fn bounds(&self) -> Rect;
