@@ -5,10 +5,6 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
-[features]
-vst3 = []
-clap = []
-
 [lints]
 workspace = true
 
@@ -20,9 +16,13 @@ crate-type = ["cdylib", "rlib"]
 anyhow.workspace = true
 raw-window-handle.workspace = true
 tracing.workspace = true
+vst3-sys = { workspace = true, optional = true }
+vst3-com = { path = "../extern/vst3-sys/com", optional = true }
+clap-sys = { workspace = true, optional = true }
 
-# VST3/CLAP bindings will be added in Phase 4
-# For now, we're implementing the build system and skeleton structure
+[features]
+vst3 = ["dep:vst3-sys", "dep:vst3-com"]
+clap = ["dep:clap-sys"]
 
 # For catching panics at FFI boundary
 # (using std::panic::catch_unwind, no additional deps needed)

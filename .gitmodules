@@ -1,6 +1,9 @@
 [submodule "clap"]
 	path = clap
 	url = https://github.com/free-audio/clap
+[submodule "extern/pluginval"]
+	path = extern/pluginval
+	url = https://github.com/Tracktion/pluginval
 [submodule "extern/cpal"]
 	path = extern/cpal
 	url = https://github.com/RustAudio/cpal.git

@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+exclude = ["extern"]
 members = [
     "audio-core",
     "plugin",
@@ -28,6 +29,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 image = "0.24"
+vst3-sys = { path = "extern/vst3-sys" }
+clap-sys = { path = "extern/clap-sys" }
 cpal = { path = "extern/cpal" }
 
 [workspace.lints.rust]

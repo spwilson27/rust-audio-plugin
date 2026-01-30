@@ -1,3 +1,5 @@
 [alias]
 xtask = "run --package xtask"
-test = "nextest run"
+
+[env]
+VST3_SDK_DIR = { value = "extern/vst3", relative = true }
