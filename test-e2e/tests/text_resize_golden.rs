@@ -8,6 +8,8 @@ async fn test_text_resize_golden() -> anyhow::Result<()> {
     let goldens_dir = manifest_dir.join("goldens");
     std::fs::create_dir_all(&goldens_dir).unwrap();
 
+    let mut tester = test_e2e::GoldenTester::new();
+
     let golden_path = goldens_dir.join("text_resize_golden.png");
 
     println!("Starting test-e2e in text-resize mode...");
@@ -75,7 +77,8 @@ async fn test_text_resize_golden() -> anyhow::Result<()> {
     let _ = child.wait();
 
     // Verify
-    test_e2e::verify_golden(&img, &golden_path);
+    tester.check(&img, &golden_path);
 
+    tester.assert();
     Ok(())
 }

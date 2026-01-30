@@ -247,123 +247,155 @@ pub async fn quit_process(
 
 /// Verify an actual image against a golden reference.
 pub fn verify_golden(actual_img: &image::RgbaImage, golden_path: &Path) {
-    // Determine platform suffix
-    let suffix = if cfg!(target_os = "macos") {
-        ".macos.png"
-    } else if cfg!(target_os = "linux") {
-        ".linux.png"
-    } else if cfg!(target_os = "windows") {
-        ".windows.png"
-    } else {
-        ".png"
-    };
+    let mut tester = GoldenTester::new();
+    tester.check(actual_img, golden_path);
+    tester.assert();
+}
 
-    // Construct platform-specific golden path
-    let mut golden_path_with_suffix = golden_path.to_path_buf();
-    if let Some(ext) = golden_path.extension() {
-        if ext == "png" {
-            let file_stem = golden_path.file_stem().unwrap().to_str().unwrap();
-            golden_path_with_suffix =
-                golden_path.with_file_name(format!("{}{}", file_stem, suffix));
+/// Helper for batched golden verification
+pub struct GoldenTester {
+    failures: Vec<String>,
+}
+
+impl GoldenTester {
+    pub fn new() -> Self {
+        Self {
+            failures: Vec::new(),
         }
     }
 
-    let has_golden = golden_path_with_suffix.exists();
-    let golden_img_opt = if has_golden {
-        Some(
-            image::open(&golden_path_with_suffix)
-                .expect("Failed to open golden image")
-                .to_rgba8(),
-        )
-    } else {
-        None
-    };
-
-    let mismatch = if let Some(golden_img) = &golden_img_opt {
-        if actual_img.dimensions() != golden_img.dimensions() {
-            Some(format!(
-                "Dimensions mismatch: actual {:?} vs golden {:?}",
-                actual_img.dimensions(),
-                golden_img.dimensions()
-            ))
+    pub fn check(&mut self, actual_img: &image::RgbaImage, golden_path: &Path) {
+        // Determine platform suffix
+        let suffix = if cfg!(target_os = "macos") {
+            ".macos.png"
+        } else if cfg!(target_os = "linux") {
+            ".linux.png"
+        } else if cfg!(target_os = "windows") {
+            ".windows.png"
         } else {
-            let mut diff_pixels = 0;
-            for (x, y, pixel) in actual_img.enumerate_pixels() {
-                if pixel != golden_img.get_pixel(x, y) {
-                    diff_pixels += 1;
+            ".png"
+        };
+
+        // Construct platform-specific golden path
+        let mut golden_path_with_suffix = golden_path.to_path_buf();
+        if let Some(ext) = golden_path.extension() {
+            if ext == "png" {
+                let file_stem = golden_path.file_stem().unwrap().to_str().unwrap();
+                golden_path_with_suffix =
+                    golden_path.with_file_name(format!("{}{}", file_stem, suffix));
+            }
+        }
+
+        let has_golden = golden_path_with_suffix.exists();
+        let golden_img_opt = if has_golden {
+            Some(
+                image::open(&golden_path_with_suffix)
+                    .expect("Failed to open golden image")
+                    .to_rgba8(),
+            )
+        } else {
+            None
+        };
+
+        let mismatch = if let Some(golden_img) = &golden_img_opt {
+            if actual_img.dimensions() != golden_img.dimensions() {
+                Some(format!(
+                    "Dimensions mismatch: actual {:?} vs golden {:?}",
+                    actual_img.dimensions(),
+                    golden_img.dimensions()
+                ))
+            } else {
+                let mut diff_pixels = 0;
+                for (x, y, pixel) in actual_img.enumerate_pixels() {
+                    if pixel != golden_img.get_pixel(x, y) {
+                        diff_pixels += 1;
+                    }
+                }
+                if diff_pixels > 0 {
+                    Some(format!("Pixel mismatch count: {}", diff_pixels))
+                } else {
+                    None
                 }
             }
-            if diff_pixels > 0 {
-                Some(format!("Pixel mismatch count: {}", diff_pixels))
+        } else {
+            Some("Golden image missing".to_string())
+        };
+
+        if let Some(reason) = mismatch {
+            let file_name = golden_path_with_suffix
+                .file_name()
+                .unwrap_or(std::ffi::OsStr::new("unknown.png"));
+            let file_name_str = file_name.to_string_lossy();
+
+            // Find project root (search for Cargo.lock)
+            let mut root_dir = std::env::current_dir().unwrap();
+            while !root_dir.join("Cargo.lock").exists() {
+                if !root_dir.pop() {
+                    // Fallback to current dir
+                    root_dir = std::env::current_dir().unwrap();
+                    break;
+                }
+            }
+
+            let target_dir = root_dir.join("target/golden_updates");
+            std::fs::create_dir_all(&target_dir).unwrap();
+            let actual_path = target_dir.join(file_name_str.as_ref());
+
+            actual_img
+                .save(&actual_path)
+                .expect("Failed to save actual image");
+
+            // Try to get absolute paths for nicer output
+            let golden_abs = if golden_path_with_suffix.is_absolute() {
+                golden_path_with_suffix.clone()
             } else {
-                None
-            }
+                std::env::current_dir()
+                    .unwrap()
+                    .join(&golden_path_with_suffix)
+            };
+
+            println!("\nGolden Verification Failed: {}", reason);
+            println!("Golden Path: file://{}", golden_abs.display());
+            println!("Actual Path: file://{}", actual_path.display());
+
+            // Use host path if provided (for Docker runs)
+            let suggest_actual = if let Ok(host_path) = std::env::var("SPLUG_GOLDEN_HOST_PATH") {
+                PathBuf::from(host_path).join(file_name_str.as_ref())
+            } else {
+                actual_path
+            };
+
+            // For the destination, try to make it relative to project root for copy-paste friendliness
+            let suggest_dest = if let Ok(rel) = golden_path_with_suffix.strip_prefix(&root_dir) {
+                rel.to_path_buf()
+            } else {
+                golden_path_with_suffix
+            };
+
+            println!("\nTo update the golden image, run:\n");
+            println!(
+                "cp \"{}\" \"{}\"",
+                suggest_actual.display(),
+                suggest_dest.display()
+            );
+            println!("\nThen view the diff to verify it's correct.\n");
+
+            self.failures.push(format!(
+                "Golden verification failed for {}: {}",
+                golden_path.display(),
+                reason
+            ));
+        } else {
+            println!("Golden verification passed for {}", golden_path.display());
         }
-    } else {
-        Some("Golden image missing".to_string())
-    };
+    }
 
-    if let Some(reason) = mismatch {
-        let file_name = golden_path_with_suffix
-            .file_name()
-            .unwrap_or(std::ffi::OsStr::new("unknown.png"));
-        let file_name_str = file_name.to_string_lossy();
-
-        // Find project root (search for Cargo.lock)
-        let mut root_dir = std::env::current_dir().unwrap();
-        while !root_dir.join("Cargo.lock").exists() {
-            if !root_dir.pop() {
-                // Fallback to current dir
-                root_dir = std::env::current_dir().unwrap();
-                break;
-            }
+    pub fn assert(&self) {
+        if !self.failures.is_empty() {
+            panic!(
+                "{} golden verification(s) failed. See output above for details.",
+                self.failures.len()
+            );
         }
-
-        let target_dir = root_dir.join("target/golden_updates");
-        std::fs::create_dir_all(&target_dir).unwrap();
-        let actual_path = target_dir.join(file_name_str.as_ref());
-
-        actual_img
-            .save(&actual_path)
-            .expect("Failed to save actual image");
-
-        // Try to get absolute paths for nicer output
-        let golden_abs = if golden_path_with_suffix.is_absolute() {
-            golden_path_with_suffix.clone()
-        } else {
-            std::env::current_dir()
-                .unwrap()
-                .join(&golden_path_with_suffix)
-        };
-
-        println!("\nGolden Verification Failed: {}", reason);
-        println!("Golden Path: file://{}", golden_abs.display());
-        println!("Actual Path: file://{}", actual_path.display());
-
-        // Use host path if provided (for Docker runs)
-        let suggest_actual = if let Ok(host_path) = std::env::var("SPLUG_GOLDEN_HOST_PATH") {
-            PathBuf::from(host_path).join(file_name_str.as_ref())
-        } else {
-            actual_path
-        };
-
-        // For the destination, try to make it relative to project root for copy-paste friendliness
-        let suggest_dest = if let Ok(rel) = golden_path_with_suffix.strip_prefix(&root_dir) {
-            rel.to_path_buf()
-        } else {
-            golden_path_with_suffix
-        };
-
-        println!("\nTo update the golden image, run:\n");
-        println!(
-            "cp \"{}\" \"{}\"",
-            suggest_actual.display(),
-            suggest_dest.display()
-        );
-        println!("\nThen view the diff to verify it's correct.\n");
-
-        panic!("Golden verification failed. See output above.");
-    } else {
-        println!("Golden verification passed for {}", golden_path.display());
     }
 }

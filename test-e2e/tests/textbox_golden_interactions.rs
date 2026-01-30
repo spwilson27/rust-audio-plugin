@@ -15,6 +15,7 @@ async fn test_textbox_interactions_golden() {
     std::fs::create_dir_all(&goldens_dir).unwrap();
 
     // 1. Start App
+    let mut tester = test_e2e::GoldenTester::new();
     let mut child = test_e2e::spawn_test_e2e(root_dir, "text-resize").expect("Failed to start app");
 
     // Connect RPC
@@ -36,7 +37,7 @@ async fn test_textbox_interactions_golden() {
         let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_1_initial.png"));
+        tester.check(&img, &goldens_dir.join("textbox_1_initial.png"));
     }
 
     // --- Interaction: Click to Focus ---
@@ -78,7 +79,7 @@ async fn test_textbox_interactions_golden() {
         let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_2_focused.png"));
+        tester.check(&img, &goldens_dir.join("textbox_2_focused.png"));
     }
 
     // --- Interaction: Type " 123" ---
@@ -107,7 +108,7 @@ async fn test_textbox_interactions_golden() {
         let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_3_typed.png"));
+        tester.check(&img, &goldens_dir.join("textbox_3_typed.png"));
     }
 
     // --- Interaction: Drag Select "Test" ---
@@ -168,7 +169,7 @@ async fn test_textbox_interactions_golden() {
         let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_4_selected.png"));
+        tester.check(&img, &goldens_dir.join("textbox_4_selected.png"));
     }
 
     // --- Interaction: Backspace (Delete Selection) ---
@@ -207,10 +208,11 @@ async fn test_textbox_interactions_golden() {
         let img = test_e2e::capture_screenshot(&mut client)
             .await
             .expect("Capture failed");
-        test_e2e::verify_golden(&img, &goldens_dir.join("textbox_5_edited.png"));
+        tester.check(&img, &goldens_dir.join("textbox_5_edited.png"));
     }
 
     // Cleanup
     test_e2e::quit_process(&mut client).await.ok();
     child.kill().ok();
+    tester.assert();
 }

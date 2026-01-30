@@ -12,6 +12,8 @@ async fn test_widget_showcase_golden() {
     let goldens_dir = manifest_dir.join("goldens");
     std::fs::create_dir_all(&goldens_dir).unwrap();
 
+    let mut tester = test_e2e::GoldenTester::new();
+
     // Start App
     let mut child = test_e2e::spawn_test_e2e(root_dir, "widgets").expect("Failed to start app");
 
@@ -35,9 +37,10 @@ async fn test_widget_showcase_golden() {
         .expect("Capture failed");
 
     // Verify
-    test_e2e::verify_golden(&img, &goldens_dir.join("widgets_showcase.png"));
+    tester.check(&img, &goldens_dir.join("widgets_showcase.png"));
 
     // Cleanup
     test_e2e::quit_process(&mut client).await.ok();
     child.kill().ok();
+    tester.assert();
 }

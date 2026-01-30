@@ -25,13 +25,15 @@ async fn test_audio_selection_ui() -> Result<()> {
         })
         .await?;
 
+    let mut tester = GoldenTester::new();
+
     // Wait for layout to settle
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // 4. Initial State (Collapsed)
     {
         let img = capture_screenshot(&mut client).await?;
-        verify_golden(&img, Path::new("tests/goldens/audio_selection_initial.png"));
+        tester.check(&img, Path::new("tests/goldens/audio_selection_initial.png"));
     }
 
     // 5. Open Dropdown
@@ -79,7 +81,7 @@ async fn test_audio_selection_ui() -> Result<()> {
     // State: Expanded
     {
         let img = capture_screenshot(&mut client).await?;
-        verify_golden(
+        tester.check(
             &img,
             Path::new("tests/goldens/audio_selection_expanded.png"),
         );
@@ -104,7 +106,7 @@ async fn test_audio_selection_ui() -> Result<()> {
     // State: Hover Item 2
     {
         let img = capture_screenshot(&mut client).await?;
-        verify_golden(&img, Path::new("tests/goldens/audio_selection_hover.png"));
+        tester.check(&img, Path::new("tests/goldens/audio_selection_hover.png"));
     }
 
     // 7. Click Item 2 (Select)
@@ -135,7 +137,7 @@ async fn test_audio_selection_ui() -> Result<()> {
     // State: Selected (Collapsed, New Value)
     {
         let img = capture_screenshot(&mut client).await?;
-        verify_golden(
+        tester.check(
             &img,
             Path::new("tests/goldens/audio_selection_selected.png"),
         );
@@ -193,7 +195,7 @@ async fn test_audio_selection_ui() -> Result<()> {
     // State: Should be same as "Selected" (Still Item 2, Closed)
     {
         let img = capture_screenshot(&mut client).await?;
-        verify_golden(
+        tester.check(
             &img,
             Path::new("tests/goldens/audio_selection_selected_unfocused.png"),
         );
@@ -249,7 +251,7 @@ async fn test_audio_selection_ui() -> Result<()> {
     // Verify Highlight moved to Item 1
     {
         let img = capture_screenshot(&mut client).await?;
-        verify_golden(
+        tester.check(
             &img,
             Path::new("tests/goldens/audio_selection_keyboard_up.png"),
         );
@@ -304,7 +306,7 @@ async fn test_audio_selection_ui() -> Result<()> {
     // State: Closed, Item 1 selected (Initial State)
     {
         let img = capture_screenshot(&mut client).await?;
-        verify_golden(&img, Path::new("tests/goldens/audio_selection_initial.png"));
+        tester.check(&img, Path::new("tests/goldens/audio_selection_initial.png"));
     }
 
     // Quit
@@ -314,5 +316,6 @@ async fn test_audio_selection_ui() -> Result<()> {
         })
         .await?;
 
+    tester.assert();
     Ok(())
 }
