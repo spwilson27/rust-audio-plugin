@@ -112,8 +112,8 @@ object_getInstanceVariable(view, key, &mut out_ptr);
 ## Build Status
 
 **Final:**  
-- ✅ Compiles Successfully  
-- ⚠️ 7 Warnings (deprecation, unused imports)
+- Compiles Successfully  
+- 7 Warnings (deprecation, unused imports)
 - 0 Errors
 
 **Warnings:**

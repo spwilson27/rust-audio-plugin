@@ -2,7 +2,7 @@
 
 ## Current Status
 
-✅ **Completed:**
+**Completed:**
 - PAL crate created with [NativeWindow](file:///Users/mrwilson/Software/rust-vst/pal/src/lib.rs#22-54) trait
 - macOS and Windows module stubs
 - GUI crate skeleton with `UIEvent` types

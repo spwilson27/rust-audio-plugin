@@ -40,7 +40,7 @@ graph TD
 - **Global Config State**: `redb` (embedded database) is used for robust, ACID-compliant read/write synchronization across active plugin instances to the shared config save file.
 - **VST/Plugin Instance State**: Plugin state will be stored in the VST3/CLAP state chunk for persistence across plugin loads. This will be serialized into a protobuf message.
 
-### 🔗 Inter-Process Communication (RPC)
+### Inter-Process Communication (RPC)
 For testing, we use a custom RPC protocol to communicate between the test runner and the hosted plugin. The plugin supports generic events either from the debug server or from the native PAL. This allows us to mock events in tests without needing to directly interact with the GUI.
 - **Schema**: Defined in [definitions/proto](definitions/proto).
 - **Capabilities**:

@@ -319,7 +319,7 @@ pub fn verify_golden(actual_img: &image::RgbaImage, golden_path: &Path) {
                 .join(&golden_path_with_suffix)
         };
 
-        println!("\n❌ Golden Verification Failed: {}", reason);
+        println!("\nGolden Verification Failed: {}", reason);
         println!("Golden Path: file://{}", golden_abs.display());
         println!("Actual Path: file://{}", actual_path.display());
 
@@ -337,7 +337,7 @@ pub fn verify_golden(actual_img: &image::RgbaImage, golden_path: &Path) {
             golden_path_with_suffix
         };
 
-        println!("\n📋 To update the golden image, run:\n");
+        println!("\nTo update the golden image, run:\n");
         println!(
             "cp \"{}\" \"{}\"",
             suggest_actual.display(),
@@ -347,9 +347,6 @@ pub fn verify_golden(actual_img: &image::RgbaImage, golden_path: &Path) {
 
         panic!("Golden verification failed. See output above.");
     } else {
-        println!(
-            "✅ Golden verification passed for {}",
-            golden_path.display()
-        );
+        println!("Golden verification passed for {}", golden_path.display());
     }
 }

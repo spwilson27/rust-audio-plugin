@@ -89,7 +89,7 @@ fn main() -> Result<()> {
 
 fn build(release: bool, docker: bool) -> Result<()> {
     if docker {
-        println!("🐳 Building Docker image...");
+        println!("Building Docker image...");
         let status = Command::new("docker")
             .args(["build", "-t", "rust-vst-test", "."])
             .status()
@@ -100,7 +100,7 @@ fn build(release: bool, docker: bool) -> Result<()> {
         }
         println!("  ✓ Docker image built: rust-vst-test");
     } else {
-        println!("🔨 Building workspace...");
+        println!("Building workspace...");
         let mut cmd = Command::new("cargo");
         cmd.arg("build").arg("--workspace");
         if release {
@@ -146,7 +146,7 @@ fn test(
 
     match mode {
         TestMode::Native => {
-            println!("🧪 Running tests (Native)...");
+            println!("Running tests (Native)...");
             let mut cmd = Command::new("cargo");
             cmd.arg("test");
 
@@ -163,7 +163,7 @@ fn test(
             println!("  ✓ Tests passed");
         }
         TestMode::Docker => {
-            println!("🐳 Running tests in Docker container...");
+            println!("Running tests in Docker container...");
 
             let pwd = std::env::current_dir()?;
             let pwd_str = pwd.to_str().context("Invalid path")?;
@@ -215,7 +215,7 @@ fn test(
             println!("  ✓ Tests passed (Docker)");
         }
         TestMode::Tart => {
-            println!("🍏 Running tests in Tart VM ('{}')...", vm_name);
+            println!("Running tests in Tart VM ('{}')...", vm_name);
 
             // 1. Check/Start VM
             let list_output = Command::new("tart")
@@ -229,13 +229,13 @@ fn test(
                 .any(|line| line.contains(&vm_name) && line.contains("running"));
 
             if !already_running {
-                println!("  🚀 Starting VM...");
+                println!("  Starting VM...");
                 Command::new("tart")
                     .args(["run", "--no-graphics", &vm_name])
                     .spawn()
                     .context("Failed to start VM")?;
 
-                println!("  ⏳ Waiting for VM to boot...");
+                println!("  Waiting for VM to boot...");
                 let _ = get_vm_ip(&vm_name)?;
                 std::thread::sleep(std::time::Duration::from_secs(5));
             } else {
@@ -247,7 +247,7 @@ fn test(
             println!("  ✓ VM IP: {}", ip);
 
             // 3. Sync Source to VM
-            println!("  🔄 Syncing source code to VM (rsync)...");
+            println!("  Syncing source code to VM (rsync)...");
 
             // Remove symlink if it exists (legacy), but preserve dir for incremental builds if possible
             // Note: If ~/project is a symlink, `test -L` returns true.
@@ -293,7 +293,7 @@ fn test(
             println!("  ✓ Sync complete");
 
             // 4. Run Tests in VM
-            println!("  mb🔨 Building and Running tests in VM...");
+            println!("  mb Building and Running tests in VM...");
 
             let mut remote_cargo = String::from("export PATH=$HOME/bin:$PATH && export SPLUG_WORKSPACE_ROOT=$HOME/project && cd ~/project && cargo test");
 
@@ -352,43 +352,43 @@ fn get_vm_ip(name: &str) -> Result<String> {
 
 /// Main bundle command - orchestrates the entire build process
 fn bundle(release: bool) -> Result<()> {
-    println!("🔨 Building splug plugin bundle...");
+    println!("Building splug plugin bundle...");
 
     let root = project_root()?;
     let profile = if release { "release" } else { "debug" };
 
     // Step 1: Compile shaders
-    println!("\n📦 Step 1/4: Compiling shaders...");
+    println!("\nStep 1/4: Compiling shaders...");
     compile_shaders(&root)?;
 
     // Step 2: Build Rust library
-    println!("\n📦 Step 2/4: Building Rust library ({})...", profile);
+    println!("\nStep 2/4: Building Rust library ({})...", profile);
     build_rust_library(release)?;
 
     // Step 3: Create platform bundle
-    println!("\n📦 Step 3/4: Creating platform bundle...");
+    println!("\nStep 3/4: Creating platform bundle...");
     create_bundle(&root, profile)?;
 
     // Step 4: Codesign (macOS only)
     #[cfg(target_os = "macos")]
     {
-        println!("\n📦 Step 4/4: Codesigning bundle...");
+        println!("\nStep 4/4: Codesigning bundle...");
         codesign_bundle(&root)?;
     }
 
     #[cfg(not(target_os = "macos"))]
     {
-        println!("\n📦 Step 4/4: Codesigning (skipped on non-macOS)");
+        println!("\nStep 4/4: Codesigning (skipped on non-macOS)");
     }
 
-    println!("\n✅ Bundle complete!");
+    println!("\nBundle complete!");
     print_bundle_location(&root)?;
 
     Ok(())
 }
 
 fn lint() -> Result<()> {
-    println!("🔍 Running clippy...");
+    println!("Running clippy...");
     let status = Command::new("cargo")
         .args([
             "clippy",
@@ -409,7 +409,7 @@ fn lint() -> Result<()> {
 }
 
 fn coverage(verify: bool) -> Result<()> {
-    println!("📊 Running coverage analysis...");
+    println!("Running coverage analysis...");
 
     // Check if cargo-llvm-cov is installed
     let version_check = Command::new("cargo")
@@ -417,7 +417,7 @@ fn coverage(verify: bool) -> Result<()> {
         .output();
 
     if version_check.is_err() {
-        println!("  ⚠️  cargo-llvm-cov not found. Installing...");
+        println!("  cargo-llvm-cov not found. Installing...");
         let install_status = Command::new("cargo")
             .args(["install", "cargo-llvm-cov"])
             .status()
@@ -455,7 +455,7 @@ fn compile_shaders(root: &Path) -> Result<()> {
     std::fs::create_dir_all(&output_dir).context("Failed to create shader output directory")?;
 
     if !shader_dir.exists() {
-        println!("  ⚠️  No shader directory found, skipping shader compilation");
+        println!("  No shader directory found, skipping shader compilation");
         return Ok(());
     }
 
@@ -463,7 +463,7 @@ fn compile_shaders(root: &Path) -> Result<()> {
     let glslc_path = find_glslc();
 
     if glslc_path.is_none() {
-        println!("  ⚠️  glslc not found - skipping shader compilation");
+        println!("  glslc not found - skipping shader compilation");
         println!("      Install Vulkan SDK to enable shader compilation:");
         println!("      macOS: brew install vulkan-tools");
         println!("      Or download from: https://vulkan.lunarg.com/");
@@ -508,7 +508,7 @@ fn compile_shaders(root: &Path) -> Result<()> {
     }
 
     if compiled_count == 0 {
-        println!("  ⚠️  No shaders found to compile");
+        println!("  No shaders found to compile");
     } else {
         println!("  ✓ Compiled {} shader(s)", compiled_count);
     }
