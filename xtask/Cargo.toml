@@ -27,4 +27,5 @@ debug-server = { path = "../debug-server" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0" # For parsing lockfile
 test-e2e = { path = "../test-e2e" }
+which = "8.0.0"
 [dev-dependencies]

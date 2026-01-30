@@ -3,7 +3,6 @@
 //! Verifies OS shortcuts like Copy, Paste, Select All, Delete Word.
 
 use debug_server::DebugControlClient;
-use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -35,7 +34,7 @@ impl Drop for ProcessGuard {
 }
 
 async fn setup_test() -> (ProcessGuard, DebugControlClient<tonic::transport::Channel>) {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest_dir = test_e2e::manifest_dir();
     let root_dir = manifest_dir.parent().unwrap();
 
     // Start binary
@@ -83,7 +82,8 @@ async fn setup_test() -> (ProcessGuard, DebugControlClient<tonic::transport::Cha
 
 #[tokio::test]
 async fn test_select_all_and_replace() {
-    let (mut _child, mut client) = setup_test().await;
+    let (mut _child, mut client): (ProcessGuard, DebugControlClient<tonic::transport::Channel>) =
+        setup_test().await;
 
     // Use Textbox ID 8 ("Sample Text")
     let textbox_id = 8;
@@ -199,7 +199,8 @@ async fn test_select_all_and_replace() {
 
 #[tokio::test]
 async fn test_delete_word_backward() {
-    let (mut _child, mut client) = setup_test().await;
+    let (mut _child, mut client): (ProcessGuard, DebugControlClient<tonic::transport::Channel>) =
+        setup_test().await;
     let textbox_id = 10; // "Focused"
 
     // Focus

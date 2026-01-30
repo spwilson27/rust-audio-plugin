@@ -1,54 +1,53 @@
 # macOS VM Testing with Tart
 
-We use **Tart** to run macOS VMs on Apple Silicon for isolated testing and verification.
+We use **Tart** to run macOS VMs on Apple Silicon for isolated testing and confirmation of standard C-ABI behavior without local machine pollution.
 
 ## Prerequisites
 
 - Apple Silicon Mac
 - Homebrew
-- [Tart](https://github.com/cirruslabs/tart)
+- [Tart](https://github.com/cirruslabs/tart): `brew install cirruslabs/cli/tart`
+- [Tart](https://github.com/cirruslabs/tart): `brew install cirruslabs/cli/tart`
+- `sshpass`: `brew install sshpass` (for automated password entry)
 
-## Installation
+## VM Requirements
 
-```bash
-brew install cirruslabs/cli/tart
-```
+The VM requires the following tools installed (e.g., in `~/bin` or standard PATH):
+- **Rust Toolchain**: `rustup` (cargo, rustc)
+- **Protobuf Compiler**: `protoc` (download from [GitHub Releases](https://github.com/protocolbuffers/protobuf/releases))
+- **Vulkan SDK**: Download from [LunarG](https://vulkan.lunarg.com/sdk/home)
+
 
 ## Setup
 
 1. **Create the VM**:
-   We recommend creating a fresh VM from the latest macOS IPSW:
    ```bash
-   tart create vst-test-vm --from-ipsw=latest
+   tart create vst-test-vm --from-ipsw=latest --disk-size 100
    ```
 
-2. **Run the VM**:
-   ```bash
-   tart run vst-test-vm
-   ```
-   This will boot the VM and show a window.
+2. **Configure VM**:
+   - Run the VM: `tart run vst-test-vm`
+   - Login (User: `admin`, Pass: `admin`)
+   - **Enable SSH**: System Settings -> General -> Sharing -> Enable **Remote Login**
+   - **Automatic Login**: System Settings -> Users & Groups -> Automatically login as `admin` (or see [Apple Support](https://support.apple.com/en-us/102316))
+   - Install the Vulkan SDK
 
-3. **Login**:
-   - Username: `admin`
-   - Password: `admin`
+## Usage
 
-## Development Workflow
-
-### Mounting the Codebase
-Tart supports mounting directories into the VM. To mount the current project directory:
+Run tests using `xtask`:
 
 ```bash
-tart run --dir=rust-vst-2:$(pwd) vst-test-vm
+cargo xtask test --vm
 ```
-Inside the VM, this will be available at `/Volumes/rust-vst-2` or similar (usually requires Tart Guest tools, but the `--dir` flag uses virtio-fs which is supported by macOS guests).
 
-### Running Tests
-Inside the VM:
-1. Open Terminal.
-2. Navigate to the mounted volume.
-3. Run `cargo test` (you will need to install Rust in the VM first).
+This command will automatically:
+1. **Build tests on your Host machine** (fast, uses local caches).
+2. **Start the VM** (if not running) with the project directory mounted.
+3. **Sync** the project to the VM using `rsync` (excludes `target/` and `.git`, but includes necessary artifacts).
+4. **Execute** the tests inside the VM via SSH.
 
-## Automation (Planned)
-We plan to integrate this into `xtask` so you can run:
-`cargo xtask test --vm`
-which will spin up the VM checkouts the code, runs the tests, and shuts down.
+## Debugging
+
+- If tests hang, check VM network connectivity.
+- `xtask` expects the VM IP to be reachable.
+- Logs from the VM are streamed to your console.

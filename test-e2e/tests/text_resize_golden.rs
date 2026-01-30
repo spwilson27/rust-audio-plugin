@@ -1,11 +1,9 @@
-use anyhow::Result;
-use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
 
 #[tokio::test]
-async fn test_text_resize_golden() -> Result<()> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+async fn test_text_resize_golden() -> anyhow::Result<()> {
+    let manifest_dir = test_e2e::manifest_dir();
     let root_dir = manifest_dir.parent().unwrap();
     let goldens_dir = manifest_dir.join("goldens");
     std::fs::create_dir_all(&goldens_dir).unwrap();

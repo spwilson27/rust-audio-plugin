@@ -3,12 +3,11 @@
 //! Verifies that the standalone binary runs in headless mode and serves RPC.
 
 use anyhow::Result;
-use std::path::PathBuf;
 use std::time::Duration;
 
 #[tokio::test]
 async fn test_standalone_headless() -> Result<()> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest_dir = test_e2e::manifest_dir();
     let _root_dir = manifest_dir.parent().unwrap();
 
     println!("Starting standalone headless...");

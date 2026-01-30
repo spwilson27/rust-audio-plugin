@@ -39,6 +39,158 @@ impl Drop for ProcessGuard {
     }
 }
 
+#[tokio::test]
+async fn test_textbox_focus() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let root_dir = manifest_dir.parent().unwrap();
+
+    // Start binary
+    let mut child = ProcessGuard::spawn(
+        root_dir.join("target/debug/test-e2e").to_str().unwrap(),
+        &["--mode", "widgets", "--fixed-fps"],
+    )
+    .expect("Failed to start test-e2e");
+
+    // Wait for RPC server (lockfile)
+    let pid = child.id();
+    let temp_dir = std::env::temp_dir();
+    let lockfile_path = temp_dir.join(format!("test_e2e_pid_{}.json", pid));
+
+    let mut port = 0;
+    for _ in 0..100 {
+        if lockfile_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&lockfile_path) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(p) = json.get("port").and_then(|v| v.as_u64()) {
+                        port = p as u16;
+                        break;
+                    }
+                }
+            }
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    assert!(port > 0, "Failed to find RPC port");
+
+    let addr = format!("http://127.0.0.1:{}", port);
+    let channel = Endpoint::from_shared(addr)
+        .expect("Invalid URI")
+        .connect()
+        .await
+        .expect("Failed to connect to RPC server");
+
+    let mut client = DebugControlClient::new(channel)
+        .max_decoding_message_size(16 * 1024 * 1024)
+        .max_encoding_message_size(16 * 1024 * 1024);
+
+    assert!(client.wait_for_app_ready(Empty {}).await.is_ok());
+
+    // Use correct ID for the focused Textbox (ID 10 from main.rs)
+    let textbox_id = 10;
+
+    // 1. Initial State
+    // "Focused" is the initial text
+    let state = client
+        .get_widget_state(debug_server::debug_control::WidgetIdMsg {
+            widget_id: textbox_id as u64,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    if let Some(debug_server::debug_control::widget_state::SpecificState::Textbox(tb)) =
+        state.specific_state
+    {
+        assert_eq!(tb.text, "Focused");
+    } else {
+        panic!("Expected Textbox state");
+    }
+
+    // 2. Type " World"
+    println!("Sending characters...");
+    let chars = " World";
+    for c in chars.chars() {
+        client
+            .send_input_event(debug_server::debug_control::InputEventMsg {
+                event: Some(
+                    debug_server::debug_control::input_event_msg::Event::TextInput(
+                        debug_server::debug_control::TextInputMsg {
+                            text: c.to_string(),
+                        },
+                    ),
+                ),
+            })
+            .await
+            .unwrap();
+    }
+    client.sync_events(Empty {}).await.unwrap();
+
+    // Verify text: "Focused World"
+    let state_mid = client
+        .get_widget_state(debug_server::debug_control::WidgetIdMsg {
+            widget_id: textbox_id as u64,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    if let Some(debug_server::debug_control::widget_state::SpecificState::Textbox(tb)) =
+        state_mid.specific_state
+    {
+        println!("Text after typing: '{}'", tb.text);
+        assert_eq!(tb.text, "Focused World");
+    }
+
+    // 3. Backspace 6 times (Delete " World")
+    println!("Sending Backspaces...");
+    for _ in 0..6 {
+        client
+            .send_input_event(debug_server::debug_control::InputEventMsg {
+                event: Some(debug_server::debug_control::input_event_msg::Event::Key(
+                    debug_server::debug_control::KeyMsg {
+                        r#type: debug_server::debug_control::key_msg::Type::Down as i32,
+                        keycode: 51, // Backspace
+                        modifiers: 0,
+                    },
+                )),
+            })
+            .await
+            .unwrap();
+
+        client
+            .send_input_event(debug_server::debug_control::InputEventMsg {
+                event: Some(debug_server::debug_control::input_event_msg::Event::Key(
+                    debug_server::debug_control::KeyMsg {
+                        r#type: debug_server::debug_control::key_msg::Type::Up as i32,
+                        keycode: 51,
+                        modifiers: 0,
+                    },
+                )),
+            })
+            .await
+            .unwrap();
+    }
+
+    // Verify text: "Focused"
+    let state_final = client
+        .get_widget_state(debug_server::debug_control::WidgetIdMsg {
+            widget_id: textbox_id as u64,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    if let Some(debug_server::debug_control::widget_state::SpecificState::Textbox(tb)) =
+        state_final.specific_state
+    {
+        println!("Text after backspace: '{}'", tb.text);
+        assert_eq!(tb.text, "Focused");
+    }
+
+    child.kill();
+}
+
 async fn setup_test() -> (ProcessGuard, DebugControlClient<tonic::transport::Channel>) {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let root_dir = manifest_dir.parent().unwrap();

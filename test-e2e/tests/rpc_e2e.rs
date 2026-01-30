@@ -1,11 +1,11 @@
 use anyhow::Result;
 use debug_server::{InputEventMsg, MouseMsg};
-use std::path::PathBuf;
+
 use std::time::Duration;
 
 #[tokio::test]
-async fn test_rpc_event_injection() -> Result<()> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+async fn test_rpc_connection() -> Result<()> {
+    let manifest_dir = test_e2e::manifest_dir();
     let root_dir = manifest_dir.parent().unwrap();
 
     // 1. Launch in headless mode

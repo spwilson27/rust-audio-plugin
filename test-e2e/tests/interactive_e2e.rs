@@ -9,7 +9,7 @@ use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_interactive_slider() {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest_dir = test_e2e::manifest_dir();
     let root_dir = manifest_dir.parent().unwrap();
 
     // Start binary using library helper

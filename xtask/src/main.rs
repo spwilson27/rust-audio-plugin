@@ -8,6 +8,7 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
@@ -47,9 +48,18 @@ enum Commands {
     },
     /// Run tests
     Test {
-        /// Run tests inside Docker container
+        /// Run tests using native toolchain (no virtualization)
+        #[arg(long)]
+        native: bool,
+        /// Run tests inside Docker container (Default on Linux)
         #[arg(long)]
         docker: bool,
+        /// Run tests inside Tart VM (Default on macOS)
+        #[arg(long)]
+        vm: bool,
+        /// Name of the Tart VM to use
+        #[arg(long, default_value = "vst-test-vm")]
+        vm_name: String,
         /// Optional package to test
         #[arg(short, long)]
         package: Option<String>,
@@ -66,7 +76,13 @@ fn main() -> Result<()> {
         Commands::Lint => lint(),
         Commands::Coverage { verify } => coverage(verify),
         Commands::Build { release, docker } => build(release, docker),
-        Commands::Test { docker, package } => test(docker, package),
+        Commands::Test {
+            native,
+            docker,
+            vm,
+            vm_name,
+            package,
+        } => test(native, docker, vm, vm_name, package),
         Commands::TestAll {} => test_all(),
     }
 }
@@ -100,81 +116,238 @@ fn build(release: bool, docker: bool) -> Result<()> {
 }
 
 fn test_all() -> Result<()> {
-    test(/*docker=*/ false, /*package=*/ None)?;
-    test(/*docker=*/ true, /*package=*/ None)?;
+    test(false, false, false, "vst-test-vm".to_string(), None)?; // Defaults (Docker on Linux, VM on macOS)
     coverage(/*verify=*/ false)?;
     lint()?;
     Ok(())
 }
 
-fn test(docker: bool, package: Option<String>) -> Result<()> {
-    if docker {
-        println!("🐳 Running tests in Docker container...");
-
-        let pwd = std::env::current_dir()?;
-        let pwd_str = pwd.to_str().context("Invalid path")?;
-
-        // Construct the cargo test command to run inside docker
-        let mut test_cmd = String::from("cargo test --no-fail-fast");
-        if let Some(pkg) = package {
-            test_cmd.push_str(&format!(" -p {}", pkg));
-        } else {
-            test_cmd.push_str(" --workspace");
-        }
-
-        // Wrap in Xvfb and shell
-        let bash_cmd = format!(
-            "Xvfb :99 -screen 0 1024x768x24 & sleep 5 && DISPLAY=:99 vulkaninfo --summary && {}",
-            test_cmd
-        );
-
-        // Create a temporary directory on host for golden updates
-        let temp_dir = std::env::temp_dir().join(format!("splug_goldens_{}", std::process::id()));
-        std::fs::create_dir_all(&temp_dir).context("Failed to create golden update temp dir")?;
-        let temp_dir_str = temp_dir.to_str().context("Invalid temp path")?;
-
-        let status = Command::new("docker")
-            .args([
-                "run",
-                "--rm",
-                "-v",
-                &format!("{}:/app", pwd_str),
-                "-v",
-                &format!("{}:/app/target/golden_updates", temp_dir_str),
-                "-e",
-                &format!("SPLUG_GOLDEN_HOST_PATH={}", temp_dir_str),
-                "-w",
-                "/app",
-                "rust-vst-test",
-                "bash",
-                "-c",
-                &bash_cmd,
-            ])
-            .status()
-            .context("Failed to run docker container")?;
-
-        if !status.success() {
-            bail!("Tests failed in Docker");
-        }
-        println!("  ✓ Tests passed (Docker)");
+fn test(
+    native: bool,
+    docker: bool,
+    vm: bool,
+    vm_name: String,
+    package: Option<String>,
+) -> Result<()> {
+    // Determine execution mode
+    let mode = if native {
+        TestMode::Native
+    } else if docker {
+        TestMode::Docker
+    } else if vm {
+        TestMode::Tart
+    } else if cfg!(target_os = "linux") {
+        TestMode::Docker
+    } else if cfg!(target_os = "macos") {
+        TestMode::Tart
     } else {
-        println!("🧪 Running tests...");
-        let mut cmd = Command::new("cargo");
-        cmd.arg("test");
+        TestMode::Native
+    };
 
-        if let Some(pkg) = package {
-            cmd.arg("-p").arg(pkg);
-        } else {
-            cmd.arg("--workspace");
-        }
+    match mode {
+        TestMode::Native => {
+            println!("🧪 Running tests (Native)...");
+            let mut cmd = Command::new("cargo");
+            cmd.arg("test");
 
-        let status = cmd.status().context("Failed to run cargo test")?;
-        if !status.success() {
-            bail!("Tests failed");
+            if let Some(pkg) = package {
+                cmd.arg("-p").arg(pkg);
+            } else {
+                cmd.arg("--workspace");
+            }
+
+            let status = cmd.status().context("Failed to run cargo test")?;
+            if !status.success() {
+                bail!("Tests failed");
+            }
+            println!("  ✓ Tests passed");
         }
-        println!("  ✓ Tests passed");
+        TestMode::Docker => {
+            println!("🐳 Running tests in Docker container...");
+
+            let pwd = std::env::current_dir()?;
+            let pwd_str = pwd.to_str().context("Invalid path")?;
+
+            // Construct the cargo test command to run inside docker
+            let mut test_cmd = String::from("cargo test --no-fail-fast");
+            if let Some(pkg) = package {
+                test_cmd.push_str(&format!(" -p {}", pkg));
+            } else {
+                test_cmd.push_str(" --workspace");
+            }
+
+            // Wrap in Xvfb and shell
+            let bash_cmd = format!(
+                "Xvfb :99 -screen 0 1024x768x24 & sleep 5 && DISPLAY=:99 vulkaninfo --summary && {}",
+                test_cmd
+            );
+
+            // Create a temporary directory on host for golden updates
+            let temp_dir =
+                std::env::temp_dir().join(format!("splug_goldens_{}", std::process::id()));
+            std::fs::create_dir_all(&temp_dir)
+                .context("Failed to create golden update temp dir")?;
+            let temp_dir_str = temp_dir.to_str().context("Invalid temp path")?;
+
+            let status = Command::new("docker")
+                .args([
+                    "run",
+                    "--rm",
+                    "-v",
+                    &format!("{}:/app", pwd_str),
+                    "-v",
+                    &format!("{}:/app/target/golden_updates", temp_dir_str),
+                    "-e",
+                    &format!("SPLUG_GOLDEN_HOST_PATH={}", temp_dir_str),
+                    "-w",
+                    "/app",
+                    "rust-vst-test",
+                    "bash",
+                    "-c",
+                    &bash_cmd,
+                ])
+                .status()
+                .context("Failed to run docker container")?;
+
+            if !status.success() {
+                bail!("Tests failed in Docker");
+            }
+            println!("  ✓ Tests passed (Docker)");
+        }
+        TestMode::Tart => {
+            println!("🍏 Running tests in Tart VM ('{}')...", vm_name);
+
+            // 1. Check/Start VM
+            let list_output = Command::new("tart")
+                .arg("list")
+                .output()
+                .context("Failed to run tart list")?;
+
+            let list_stdout = String::from_utf8_lossy(&list_output.stdout);
+            let already_running = list_stdout
+                .lines()
+                .any(|line| line.contains(&vm_name) && line.contains("running"));
+
+            if !already_running {
+                println!("  🚀 Starting VM...");
+                Command::new("tart")
+                    .args(["run", "--no-graphics", &vm_name])
+                    .spawn()
+                    .context("Failed to start VM")?;
+
+                println!("  ⏳ Waiting for VM to boot...");
+                let _ = get_vm_ip(&vm_name)?;
+                std::thread::sleep(std::time::Duration::from_secs(5));
+            } else {
+                println!("  ✓ VM is already running");
+            }
+
+            // 2. Get IP
+            let ip = get_vm_ip(&vm_name)?;
+            println!("  ✓ VM IP: {}", ip);
+
+            // 3. Sync Source to VM
+            println!("  🔄 Syncing source code to VM (rsync)...");
+
+            // Remove symlink if it exists (legacy), but preserve dir for incremental builds if possible
+            // Note: If ~/project is a symlink, `test -L` returns true.
+            let _ = Command::new("sshpass")
+                .args([
+                    "-p",
+                    "admin",
+                    "ssh",
+                    "-o",
+                    "StrictHostKeyChecking=no",
+                    &format!("admin@{}", ip),
+                    "if [ -L ~/project ]; then rm ~/project; fi && mkdir -p ~/project",
+                ])
+                .output();
+
+            let rsync_args_base = [
+                "-p",
+                "admin",
+                "rsync",
+                "-avz",
+                "--no-times",
+                "--delete", // Delete files in VM that are removed in host (optional, but good for cleanliness)
+                "--exclude",
+                ".git",
+                "--exclude",
+                "target",
+                "--exclude",
+                "node_modules",
+                "-e",
+                "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+            ];
+
+            let mut cmd = Command::new("sshpass");
+            cmd.args(&rsync_args_base)
+                .arg(".")
+                .arg(&format!("admin@{}:~/project/", ip));
+
+            let status = cmd.status().context("Failed to run rsync source")?;
+            if !status.success() {
+                bail!("Rsync source failed");
+            }
+
+            println!("  ✓ Sync complete");
+
+            // 4. Run Tests in VM
+            println!("  mb🔨 Building and Running tests in VM...");
+
+            let mut remote_cargo = String::from("export PATH=$HOME/bin:$PATH && export SPLUG_WORKSPACE_ROOT=$HOME/project && cd ~/project && cargo test");
+
+            if let Some(pkg) = package {
+                remote_cargo.push_str(&format!(" -p {}", pkg));
+            } else {
+                remote_cargo.push_str(" --workspace");
+            }
+
+            // We stream output directly
+            let status = Command::new("sshpass")
+                .args([
+                    "-p",
+                    "admin",
+                    "ssh",
+                    "-t", // Force TTY for color/progress
+                    "-o",
+                    "StrictHostKeyChecking=no",
+                    "-o",
+                    "UserKnownHostsFile=/dev/null",
+                    &format!("admin@{}", ip),
+                    &remote_cargo,
+                ])
+                .status()
+                .context("Failed to run SSH command")?;
+
+            if !status.success() {
+                bail!("Tests failed in VM");
+            }
+            println!("  ✓ All tests passed (Tart)");
+        }
     }
     Ok(())
+}
+
+enum TestMode {
+    Native,
+    Docker,
+    Tart,
+}
+
+fn get_vm_ip(name: &str) -> Result<String> {
+    for _ in 0..30 {
+        let output = Command::new("tart").args(["ip", name]).output()?;
+
+        if output.status.success() {
+            let ip = String::from_utf8(output.stdout)?.trim().to_string();
+            if !ip.is_empty() {
+                return Ok(ip);
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    bail!("Timed out waiting for VM IP")
 }
 
 /// Main bundle command - orchestrates the entire build process

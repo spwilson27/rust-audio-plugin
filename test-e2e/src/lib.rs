@@ -15,6 +15,15 @@ pub struct LockfileInfo {
     pub pid: u32,
 }
 
+/// Get the manifest directory for test-e2e, handling VM environment
+pub fn manifest_dir() -> PathBuf {
+    if let Ok(root) = std::env::var("SPLUG_WORKSPACE_ROOT") {
+        PathBuf::from(root).join("test-e2e")
+    } else {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    }
+}
+
 #[derive(serde::Deserialize)]
 struct JsonLock {
     port: u16,
@@ -79,21 +88,26 @@ pub fn cleanup_lockfiles() -> Result<()> {
 pub fn spawn_test_e2e(root_dir: &Path, mode: &str) -> Result<ProcessGuard> {
     cleanup_lockfiles()?;
 
-    // We use "cargo run" which spawns the actual binary.
-    // Note: Cargo itself spawns a child. If we kill cargo, the child might persist unless we handle signals.
-    // For E2E tests, usually it's better to build first then spawn binary directly if possible,
-    // but `cargo run` is convenient for dev.
-    // `ProcessGuard` will kill `cargo`, which *should* propagate or at least we hope so.
-    // Ideally we build the binary and run it directly.
+    if let Ok(bin_path) = std::env::var("SPLUG_E2E_BINARY") {
+        // Run pre-built binary directly
+        let child = Command::new(bin_path)
+            .current_dir(root_dir)
+            .args(["--mode", mode])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .context("Failed to spawn test-e2e binary")?;
+        return Ok(ProcessGuard(child));
+    }
 
-    // For now, mirroring `testlib` behavior but wrapping in ProcessGuard.
+    // Fallback: Use "cargo run"
     let child = Command::new("cargo")
         .current_dir(root_dir)
         .args(["run", "-p", "test-e2e", "--", "--mode", mode])
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
-        .context("Failed to spawn test-e2e")?;
+        .context("Failed to spawn test-e2e via cargo")?;
 
     Ok(ProcessGuard(child))
 }

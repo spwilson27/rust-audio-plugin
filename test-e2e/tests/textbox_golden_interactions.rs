@@ -4,13 +4,12 @@
 //! Uses "--mode text-resize" which provides a single Textbox at (50, 50, 300, 40)
 //! with text "Resize Test Mode".
 
-use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_textbox_interactions_golden() {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest_dir = test_e2e::manifest_dir();
     let root_dir = manifest_dir.parent().unwrap();
     let goldens_dir = manifest_dir.join("goldens");
     std::fs::create_dir_all(&goldens_dir).unwrap();
