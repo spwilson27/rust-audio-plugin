@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     mesa-vulkan-drivers \
     vulkan-tools \
     xvfb \
+    curl \
     git \
     make \
     x11-xserver-utils \
@@ -18,6 +19,9 @@ RUN apt-get update && apt-get install -y \
     glslang-tools \
     vulkan-validationlayers \
     && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-nextest
+RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
 
 # Set working directory
 WORKDIR /app

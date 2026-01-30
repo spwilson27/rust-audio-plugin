@@ -116,7 +116,20 @@ fn build(release: bool, docker: bool) -> Result<()> {
 }
 
 fn test_all() -> Result<()> {
-    test(false, false, false, "vst-test-vm".to_string(), None)?; // Defaults (Docker on Linux, VM on macOS)
+    test(
+        /*native=*/ false,
+        /*docker=*/ false,
+        /*vm=*/ true,
+        "vst-test-vm".to_string(),
+        None,
+    )?;
+    test(
+        /*native=*/ false,
+        /*docker=*/ true,
+        /*vm=*/ false,
+        "vst-test-vm".to_string(),
+        None,
+    )?;
     coverage(/*verify=*/ false)?;
     lint()?;
     Ok(())
@@ -148,7 +161,7 @@ fn test(
         TestMode::Native => {
             println!("Running tests (Native)...");
             let mut cmd = Command::new("cargo");
-            cmd.arg("test");
+            cmd.arg("nextest").arg("run");
 
             if let Some(pkg) = package {
                 cmd.arg("-p").arg(pkg);
@@ -156,7 +169,7 @@ fn test(
                 cmd.arg("--workspace");
             }
 
-            let status = cmd.status().context("Failed to run cargo test")?;
+            let status = cmd.status().context("Failed to run cargo nextest run")?;
             if !status.success() {
                 bail!("Tests failed");
             }
@@ -168,8 +181,8 @@ fn test(
             let pwd = std::env::current_dir()?;
             let pwd_str = pwd.to_str().context("Invalid path")?;
 
-            // Construct the cargo test command to run inside docker
-            let mut test_cmd = String::from("cargo test --no-fail-fast");
+            // Construct the cargo nextest command to run inside docker
+            let mut test_cmd = String::from("cargo nextest run");
             if let Some(pkg) = package {
                 test_cmd.push_str(&format!(" -p {}", pkg));
             } else {
@@ -293,14 +306,25 @@ fn test(
             println!("  ✓ Sync complete");
 
             // 4. Run Tests in VM
-            println!("  mb Building and Running tests in VM...");
+            println!("  Building and Running tests in VM...");
 
-            let mut remote_cargo = String::from("export PATH=$HOME/bin:$PATH && export SPLUG_WORKSPACE_ROOT=$HOME/project && cd ~/project && cargo test");
+            // Helper function to install nextest if missing
+            // We use the binary installation script for speed, falling back if needed
+            let mut remote_cmd = String::from(
+                "export PATH=$HOME/bin:$PATH && \
+                 if ! command -v cargo-nextest &> /dev/null; then \
+                    echo 'Installing cargo-nextest...'; \
+                    curl -LsSf https://get.nexte.st/latest/mac | tar zxf - -C $HOME/bin || cargo install cargo-nextest --locked; \
+                 fi && \
+                 export SPLUG_WORKSPACE_ROOT=$HOME/project && \
+                 cd ~/project && \
+                 cargo nextest run"
+            );
 
             if let Some(pkg) = package {
-                remote_cargo.push_str(&format!(" -p {}", pkg));
+                remote_cmd.push_str(&format!(" -p {}", pkg));
             } else {
-                remote_cargo.push_str(" --workspace");
+                remote_cmd.push_str(" --workspace");
             }
 
             // We stream output directly
@@ -315,7 +339,7 @@ fn test(
                     "-o",
                     "UserKnownHostsFile=/dev/null",
                     &format!("admin@{}", ip),
-                    &remote_cargo,
+                    &remote_cmd,
                 ])
                 .status()
                 .context("Failed to run SSH command")?;
