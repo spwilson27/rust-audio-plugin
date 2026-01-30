@@ -74,6 +74,8 @@ impl Widget for Dropdown {
 
         match event {
             WidgetEvent::MouseDown { x, y, .. } => {
+                let x = *x as f32;
+                let y = *y as f32;
                 // If we are here, hit_test succeeded (either on header or overlay).
                 // Just toggle or select based on where we clicked.
 
@@ -81,39 +83,36 @@ impl Widget for Dropdown {
                     // Check if clicked inside list (overlay)
                     let item_h = self.item_height();
                     let list_height = self.items.len() as f32 * item_h;
-                    let list_rect = Rect::new(
-                        self.bounds.x,
-                        self.bounds.y + self.bounds.height,
-                        self.bounds.width,
-                        list_height,
-                    );
+                    let list_y = self.bounds.y + self.bounds.height;
 
-                    if list_rect.contains(*x, *y) {
-                        // Clicked on item
-                        let relative_y = *y as f32 - (self.bounds.y + self.bounds.height);
-                        let index = (relative_y / item_h) as usize;
+                    if y >= list_y && y <= list_y + list_height {
+                        // Clicked inside list
+                        let relative_y = y - list_y;
+                        let index = (relative_y / item_h).floor() as usize;
                         if index < self.items.len() {
-                            self.selected_index = index;
+                            self.set_selected_index(index);
                             self.expanded = false;
                             return EventResult::ValueChanged(self.selected_index as f64);
                         }
-                    }
-
-                    // Clicked header to close
-                    if self.bounds.contains(*x, *y) {
+                    } else if self.bounds.contains(x as f64, y as f64) {
+                        // Clicked on header while expanded - close it
                         self.expanded = false;
-                        return EventResult::ReleaseMouse;
+                        return EventResult::Handled;
+                    } else {
+                        // Clicked outside? container handles this via hit_test failing usually
+                        // But if we captured mouse, we might see it?
+                        // If we are here, hit_test passed.
+                        // If hit_test passed, we are either on header or overlay.
                     }
                 } else {
                     // Toggle On
-                    if self.bounds.contains(*x, *y) {
+                    if self.bounds.contains(x as f64, y as f64) {
                         self.expanded = true;
-                        // Determine initial hover based on selection
                         self.hovered_item_index = Some(self.selected_index);
-                        return EventResult::Handled; // No capture needed with new hit_test logic
+                        return EventResult::Handled;
                     }
                 }
-                EventResult::NotHandled
+                EventResult::Handled
             }
             WidgetEvent::MouseMove { x, y } => {
                 if self.expanded {

@@ -41,7 +41,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         .send_input_event(InputEventMsg {
             event: Some(Event::Mouse(MouseMsg {
                 x: 300.0,
-                y: 200.0,
+                y: 110.0,
                 button: 0,
                 r#type: 2, // Move
             })),
@@ -54,7 +54,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         .send_input_event(InputEventMsg {
             event: Some(Event::Mouse(MouseMsg {
                 x: 300.0,
-                y: 200.0,
+                y: 110.0,
                 button: 0,
                 r#type: 0, // Down
             })),
@@ -67,7 +67,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         .send_input_event(InputEventMsg {
             event: Some(Event::Mouse(MouseMsg {
                 x: 300.0,
-                y: 200.0,
+                y: 110.0,
                 button: 0,
                 r#type: 1, // Up
             })),
@@ -93,7 +93,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         .send_input_event(InputEventMsg {
             event: Some(Event::Mouse(MouseMsg {
                 x: 300.0,
-                y: 265.0,
+                y: 175.0,
                 button: 0,
                 r#type: 2, // Move
             })),
@@ -112,7 +112,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         .send_input_event(InputEventMsg {
             event: Some(Event::Mouse(MouseMsg {
                 x: 300.0,
-                y: 265.0,
+                y: 175.0,
                 button: 0,
                 r#type: 0, // Down
             })),
@@ -124,7 +124,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         .send_input_event(InputEventMsg {
             event: Some(Event::Mouse(MouseMsg {
                 x: 300.0,
-                y: 265.0,
+                y: 175.0,
                 button: 0,
                 r#type: 1, // Up
             })),
@@ -147,7 +147,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         .send_input_event(InputEventMsg {
             event: Some(Event::Mouse(MouseMsg {
                 x: 300.0,
-                y: 200.0,
+                y: 110.0,
                 button: 0,
                 r#type: 0, // Down
             })),
@@ -158,7 +158,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         .send_input_event(InputEventMsg {
             event: Some(Event::Mouse(MouseMsg {
                 x: 300.0,
-                y: 200.0,
+                y: 110.0,
                 button: 0,
                 r#type: 1, // Up
             })),
@@ -195,7 +195,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         let img = capture_screenshot(&mut client).await?;
         verify_golden(
             &img,
-            Path::new("tests/goldens/audio_selection_selected.png"),
+            Path::new("tests/goldens/audio_selection_selected_unfocused.png"),
         );
     }
 
@@ -205,7 +205,7 @@ async fn test_audio_selection_ui() -> Result<()> {
         .send_input_event(InputEventMsg {
             event: Some(Event::Mouse(MouseMsg {
                 x: 300.0,
-                y: 200.0,
+                y: 110.0,
                 button: 0,
                 r#type: 0, // Down
             })),
@@ -271,6 +271,30 @@ async fn test_audio_selection_ui() -> Result<()> {
             event: Some(Event::Key(KeyMsg {
                 keycode: 36,
                 modifiers: 0,
+                r#type: 1, // Up
+            })),
+        })
+        .await?;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Click Outside to clear focus
+    client
+        .send_input_event(InputEventMsg {
+            event: Some(Event::Mouse(MouseMsg {
+                x: 10.0,
+                y: 10.0,
+                button: 0,
+                r#type: 0, // Down
+            })),
+        })
+        .await?;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    client
+        .send_input_event(InputEventMsg {
+            event: Some(Event::Mouse(MouseMsg {
+                x: 10.0,
+                y: 10.0,
+                button: 0,
                 r#type: 1, // Up
             })),
         })

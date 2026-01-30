@@ -116,13 +116,15 @@ fn main() -> Result<()> {
     let (app_tx, app_rx) = std::sync::mpsc::channel();
     let app_tx_cb = app_tx.clone();
     window.event_router().set_callback(move |event| {
+        tracing::info!("App Callback received event: {:?}", event);
         let _ = app_tx_cb.send(event);
     });
 
     // RPC Server
-    let (_lockfile_guard, ready_notify) = if args.debug_server {
+    let (_lockfile_guard, ready_notify, debug_rx) = if args.debug_server {
         use crossbeam_channel;
         let (tx, rx) = crossbeam_channel::unbounded();
+        let debug_rx = rx.clone();
         window.event_router().set_event_receiver(rx);
         let pid = std::process::id();
         let temp_dir = std::env::temp_dir();
@@ -131,12 +133,12 @@ fn main() -> Result<()> {
             Ok((port, notify)) => {
                 let json = format!("{{ \"port\": {}, \"pid\": {} }}", port, pid);
                 std::fs::write(&path, json)?;
-                (Some(path), Some(notify))
+                (Some(path), Some(notify), Some(debug_rx))
             }
-            Err(_) => (None, None),
+            Err(_) => (None, None, None),
         }
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     if let Some(notify) = ready_notify {
@@ -145,6 +147,11 @@ fn main() -> Result<()> {
 
     tracing::info!("Starting loop...");
     loop {
+        if let Some(rx) = &debug_rx {
+            if !rx.is_empty() {
+                tracing::info!("DEBUG RX has {} events!", rx.len());
+            }
+        }
         window.event_router().poll_events();
         app.poll_events();
 

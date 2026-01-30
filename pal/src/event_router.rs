@@ -50,6 +50,9 @@ impl EventRouter {
     pub fn poll_events(&mut self) {
         if let Some(ref receiver) = self.receiver {
             let rx = receiver.clone(); // Clone receiver to avoid borrowing self
+            if !rx.is_empty() {
+                println!("PAL: Polling events from RX, len={}", rx.len());
+            }
             while let Ok(event) = rx.try_recv() {
                 self.route_event(event);
             }
