@@ -1,0 +1,11 @@
+[package]
+name = "simple-host"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+libloading = "0.8"
+clap = { version = "4.5", features = ["derive"] }
+anyhow.workspace = true

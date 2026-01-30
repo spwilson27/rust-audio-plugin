@@ -28,6 +28,9 @@ enum Commands {
         /// Build in release mode (optimized)
         #[arg(long, default_value_t = true)]
         release: bool,
+        /// Format to bundle (all, vst3, clap)
+        #[arg(long, default_value = "all")]
+        format: String,
     },
     /// Run clippy and fail on warnings
     Lint,
@@ -66,13 +69,22 @@ enum Commands {
     },
     /// Run all tests
     TestAll {},
+    /// Validate the built plugins using simple-host
+    Validate {
+        /// Format to validate (vst3, clap)
+        #[arg(long, default_value = "all")]
+        format: String,
+        /// Build in release mode
+        #[arg(long, default_value_t = true)]
+        release: bool,
+    },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Bundle { release } => bundle(release),
+        Commands::Bundle { release, format } => bundle(release, format),
         Commands::Lint => lint(),
         Commands::Coverage { verify } => coverage(verify),
         Commands::Build { release, docker } => build(release, docker),
@@ -84,6 +96,7 @@ fn main() -> Result<()> {
             package,
         } => test(native, docker, vm, vm_name, package),
         Commands::TestAll {} => test_all(),
+        Commands::Validate { format, release } => validate(format, release),
     }
 }
 
@@ -132,6 +145,7 @@ fn test_all() -> Result<()> {
     )?;
     coverage(/*verify=*/ false)?;
     lint()?;
+    validate("all".to_string(), true)?;
     Ok(())
 }
 
@@ -382,34 +396,39 @@ fn get_vm_ip(name: &str) -> Result<String> {
 }
 
 /// Main bundle command - orchestrates the entire build process
-fn bundle(release: bool) -> Result<()> {
-    println!("Building splug plugin bundle...");
+fn bundle(release: bool, format: String) -> Result<()> {
+    println!("Building splug plugin bundle for format: {}", format);
 
     let root = project_root()?;
     let profile = if release { "release" } else { "debug" };
 
-    // Step 1: Compile shaders
+    // Step 1: Compile shaders (common for all formats)
     println!("\nStep 1/4: Compiling shaders...");
     compile_shaders(&root)?;
 
-    // Step 2: Build Rust library
-    println!("\nStep 2/4: Building Rust library ({})...", profile);
-    build_rust_library(release)?;
+    let formats = if format == "all" {
+        vec!["vst3", "clap"]
+    } else {
+        vec![format.as_str()]
+    };
 
-    // Step 3: Create platform bundle
-    println!("\nStep 3/4: Creating platform bundle...");
-    create_bundle(&root, profile)?;
+    for fmt in formats {
+        println!("\n--- Processing format: {} ---", fmt);
 
-    // Step 4: Codesign (macOS only)
-    #[cfg(target_os = "macos")]
-    {
-        println!("\nStep 4/4: Codesigning bundle...");
-        codesign_bundle(&root)?;
-    }
+        // Step 2: Build Rust library
+        println!("Step 2/4: Building Rust library ({}, {})...", profile, fmt);
+        build_rust_library(release, fmt)?;
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        println!("\nStep 4/4: Codesigning (skipped on non-macOS)");
+        // Step 3: Create platform bundle
+        println!("Step 3/4: Creating platform bundle...");
+        create_bundle(&root, profile, fmt)?;
+
+        // Step 4: Codesign (macOS only)
+        #[cfg(target_os = "macos")]
+        {
+            println!("Step 4/4: Codesigning bundle...");
+            codesign_bundle(&root, fmt)?;
+        }
     }
 
     println!("\nBundle complete!");
@@ -475,6 +494,61 @@ fn coverage(verify: bool) -> Result<()> {
     }
 
     println!("  ✓ Coverage check passed");
+    Ok(())
+}
+
+fn validate(format: String, release: bool) -> Result<()> {
+    println!(
+        "Validating plugins (format: {}, release: {})...",
+        format, release
+    );
+
+    // 1. Build simple-host
+    println!("  Building simple-host...");
+    let status = Command::new("cargo")
+        .args(["build", "-p", "simple-host"])
+        .status()
+        .context("Failed to build simple-host")?;
+
+    if !status.success() {
+        bail!("Failed to build simple-host");
+    }
+
+    // 2. Determine paths
+    let root = project_root()?;
+    let formats = if format == "all" {
+        vec!["vst3", "clap"]
+    } else {
+        vec![format.as_str()]
+    };
+
+    let host_bin = root.join("target/debug/simple-host"); // simple-host is always debug for now? or should follow release flag?
+                                                          // Let's just use debug for validator for speed, key is the plugin being tested.
+
+    for fmt in formats {
+        let bundle_ext = if fmt == "vst3" { "vst3" } else { "clap" };
+        let bundle_path = root.join(format!("target/bundled/splug.{}", bundle_ext));
+
+        if !bundle_path.exists() {
+            println!("  x Bundle not found: {}", bundle_path.display());
+            println!("    (Run 'cargo xtask bundle' first)");
+            continue;
+        }
+
+        println!("  Validating {}...", bundle_path.display());
+        let status = Command::new(&host_bin)
+            .arg(&bundle_path)
+            .arg("--format")
+            .arg(fmt)
+            .status()
+            .context(format!("Failed to run simple-host for {}", fmt))?;
+
+        if !status.success() {
+            bail!("Validation failed for {}", fmt);
+        }
+        println!("  ✓ Validation passed for {}", fmt);
+    }
+
     Ok(())
 }
 
@@ -602,7 +676,8 @@ fn find_glslc() -> Option<PathBuf> {
 }
 
 /// Build the Rust library
-fn build_rust_library(release: bool) -> Result<()> {
+/// Build the Rust library
+fn build_rust_library(release: bool, format: &str) -> Result<()> {
     let mut cmd = Command::new("cargo");
     cmd.arg("build").arg("--package").arg("splug").arg("--lib");
 
@@ -610,11 +685,45 @@ fn build_rust_library(release: bool) -> Result<()> {
         cmd.arg("--release");
     }
 
+    // Enable the specific feature for this format
+    cmd.arg(format!("--features={}", format));
+
     let status = cmd.status().context("Failed to run cargo build")?;
 
     if !status.success() {
         bail!("Cargo build failed");
     }
+
+    // Rename the output to include format
+    let root = project_root()?;
+    let profile_dir = if release { "release" } else { "debug" };
+
+    // Source is always libsplug.dylib/dll/so
+    #[cfg(target_os = "macos")]
+    let lib_name = "libsplug.dylib";
+    #[cfg(target_os = "windows")]
+    let lib_name = "splug.dll";
+    #[cfg(target_os = "linux")]
+    let lib_name = "libsplug.so";
+
+    let src = root.join(format!("target/{}/{}", profile_dir, lib_name));
+
+    // Dest is libsplug.<format>.dylib or splug.<format>.dll
+    #[cfg(target_os = "macos")]
+    let dst_name = format!("libsplug.{}.dylib", format);
+    #[cfg(target_os = "windows")]
+    let dst_name = format!("splug.{}.dll", format);
+    #[cfg(target_os = "linux")]
+    let dst_name = format!("libsplug.{}.so", format);
+
+    let dst = root.join(format!("target/{}/{}", profile_dir, dst_name));
+
+    if !src.exists() {
+        bail!("Build artifact not found at: {}", src.display());
+    }
+
+    std::fs::copy(&src, &dst).context("Failed to rename build artifact")?;
+    println!("  ✓ Renamed artifact to: {}", dst_name);
 
     println!("  ✓ Rust library compiled");
     Ok(())
@@ -622,15 +731,15 @@ fn build_rust_library(release: bool) -> Result<()> {
 
 /// Create platform-specific bundle structure
 #[allow(unused_variables)]
-fn create_bundle(root: &Path, profile: &str) -> Result<()> {
+fn create_bundle(root: &Path, profile: &str, format: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
-        create_macos_bundle(root, profile)
+        create_macos_bundle(root, profile, format)
     }
 
     #[cfg(target_os = "windows")]
     {
-        create_windows_bundle(root, profile)
+        create_windows_bundle(root, profile, format)
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -640,8 +749,9 @@ fn create_bundle(root: &Path, profile: &str) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-fn create_macos_bundle(root: &Path, profile: &str) -> Result<()> {
-    let bundle_dir = root.join("target/bundled/splug.vst3");
+fn create_macos_bundle(root: &Path, profile: &str, format: &str) -> Result<()> {
+    let bundle_ext = if format == "vst3" { "vst3" } else { "clap" };
+    let bundle_dir = root.join(format!("target/bundled/splug.{}", bundle_ext));
     let contents_dir = bundle_dir.join("Contents");
     let macos_dir = contents_dir.join("MacOS");
 
@@ -649,7 +759,7 @@ fn create_macos_bundle(root: &Path, profile: &str) -> Result<()> {
     std::fs::create_dir_all(&macos_dir).context("Failed to create bundle directories")?;
 
     // Copy dylib
-    let dylib_src = root.join(format!("target/{}/libsplug.dylib", profile));
+    let dylib_src = root.join(format!("target/{}/libsplug.{}.dylib", profile, format));
     let dylib_dst = macos_dir.join("splug");
 
     if !dylib_src.exists() {
@@ -665,7 +775,7 @@ fn create_macos_bundle(root: &Path, profile: &str) -> Result<()> {
     );
 
     // Generate Info.plist
-    let plist_content = generate_info_plist();
+    let plist_content = generate_info_plist(format);
     let plist_path = contents_dir.join("Info.plist");
     std::fs::write(&plist_path, plist_content).context("Failed to write Info.plist")?;
 
@@ -681,12 +791,13 @@ fn create_macos_bundle(root: &Path, profile: &str) -> Result<()> {
 }
 
 #[cfg(target_os = "windows")]
-fn create_windows_bundle(root: &Path, profile: &str) -> Result<()> {
+fn create_windows_bundle(root: &Path, profile: &str, format: &str) -> Result<()> {
     let bundle_dir = root.join("target/bundled");
     std::fs::create_dir_all(&bundle_dir).context("Failed to create bundle directory")?;
 
-    let dll_src = root.join(format!("target/{}/splug.dll", profile));
-    let dll_dst = bundle_dir.join("splug.vst3");
+    let dll_src = root.join(format!("target/{}/splug.{}.dll", profile, format));
+    let ext = if format == "vst3" { "vst3" } else { "clap" };
+    let dll_dst = bundle_dir.join(format!("splug.{}", ext));
 
     if !dll_src.exists() {
         bail!("Library not found at: {}", dll_src.display());
@@ -704,8 +815,9 @@ fn create_windows_bundle(root: &Path, profile: &str) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-fn codesign_bundle(root: &Path) -> Result<()> {
-    let bundle_path = root.join("target/bundled/splug.vst3");
+fn codesign_bundle(root: &Path, format: &str) -> Result<()> {
+    let bundle_ext = if format == "vst3" { "vst3" } else { "clap" };
+    let bundle_path = root.join(format!("target/bundled/splug.{}", bundle_ext));
 
     let status = Command::new("codesign")
         .arg("-s")
@@ -724,8 +836,15 @@ fn codesign_bundle(root: &Path) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-fn generate_info_plist() -> String {
-    r#"<?xml version="1.0" encoding="UTF-8"?>
+fn generate_info_plist(format: &str) -> String {
+    let ident = if format == "vst3" {
+        "com.splug.vst3"
+    } else {
+        "com.splug.clap"
+    };
+
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -734,7 +853,7 @@ fn generate_info_plist() -> String {
     <key>CFBundleExecutable</key>
     <string>splug</string>
     <key>CFBundleIdentifier</key>
-    <string>com.splug.vst3</string>
+    <string>{}</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -751,25 +870,33 @@ fn generate_info_plist() -> String {
     <string></string>
 </dict>
 </plist>
-"#.to_string()
+"#,
+        ident
+    )
 }
 
 #[allow(unused_variables)]
 fn print_bundle_location(root: &Path) -> Result<()> {
-    #[cfg(target_os = "macos")]
-    {
-        println!(
-            "Bundle location: {}",
-            root.join("target/bundled/splug.vst3").display()
-        );
-    }
+    let formats = ["vst3", "clap"];
 
-    #[cfg(target_os = "windows")]
-    {
-        println!(
-            "Bundle location: {}",
-            root.join("target/bundled/splug.vst3").display()
-        );
+    for fmt in formats {
+        #[cfg(target_os = "macos")]
+        {
+            let ext = if fmt == "vst3" { "vst3" } else { "clap" };
+            let path = root.join(format!("target/bundled/splug.{}", ext));
+            if path.exists() {
+                println!("Bundle location ({}): {}", fmt, path.display());
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let ext = if fmt == "vst3" { "vst3" } else { "clap" };
+            let path = root.join(format!("target/bundled/splug.{}", ext));
+            if path.exists() {
+                println!("Bundle location ({}): {}", fmt, path.display());
+            }
+        }
     }
 
     Ok(())

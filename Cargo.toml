@@ -9,6 +9,7 @@ members = [
     "gui",
     "debug-server",
     "test-e2e",
+    "simple-host",
     "extern/cpal",
 ]
 

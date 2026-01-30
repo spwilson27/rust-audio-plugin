@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[features]
+vst3 = []
+clap = []
+
 [lints]
 workspace = true
 
