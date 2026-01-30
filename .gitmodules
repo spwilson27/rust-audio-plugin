@@ -1,5 +1,5 @@
-[submodule "clap"]
-	path = clap
+[submodule "extern/clap"]
+	path = extern/clap
 	url = https://github.com/free-audio/clap
 [submodule "extern/pluginval"]
 	path = extern/pluginval
@@ -7,3 +7,12 @@
 [submodule "extern/cpal"]
 	path = extern/cpal
 	url = https://github.com/RustAudio/cpal.git
+[submodule "extern/vst3"]
+	path = extern/vst3
+	url = https://github.com/steinbergmedia/vst3sdk.git
+[submodule "extern/clap-sys"]
+	path = extern/clap-sys
+	url = https://github.com/micahrj/clap-sys
+[submodule "extern/vst3-sys"]
+	path = extern/vst3-sys
+	url = https://github.com/RustAudio/vst3-sys

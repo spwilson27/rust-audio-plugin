@@ -28,6 +28,7 @@ pub trait AudioBackend: Send + Sync {
     fn enumerate_output_devices(&self) -> Vec<DeviceInfo>;
 
     /// Create an input stream
+    #[allow(clippy::type_complexity)]
     fn create_input_stream(
         &self,
         device_id: &str,
@@ -36,6 +37,7 @@ pub trait AudioBackend: Send + Sync {
     ) -> Result<Box<dyn AudioStream>>;
 
     /// Create an output stream
+    #[allow(clippy::type_complexity)]
     fn create_output_stream(
         &self,
         device_id: &str,

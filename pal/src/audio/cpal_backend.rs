@@ -62,7 +62,7 @@ impl AudioBackend for CpalAudioBackend {
             .input_devices()?
             .find(|d| {
                 #[allow(deprecated)]
-                d.name().map_or(false, |n| n == device_id)
+                d.name().is_ok_and(|n| n == device_id)
             })
             .context("Device not found")?;
 
@@ -101,7 +101,7 @@ impl AudioBackend for CpalAudioBackend {
             .output_devices()?
             .find(|d| {
                 #[allow(deprecated)]
-                d.name().map_or(false, |n| n == device_id)
+                d.name().is_ok_and(|n| n == device_id)
             })
             .context("Device not found")?;
 

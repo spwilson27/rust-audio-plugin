@@ -332,7 +332,7 @@ fn test(
             // Helper function to install nextest if missing
             // We use the binary installation script for speed, falling back if needed
             let mut remote_cmd = String::from(
-                "export PATH=$HOME/bin:$PATH && \
+                "export PATH=$HOME/bin:/opt/homebrew/bin:/usr/local/bin:$PATH && \
                  if ! command -v cargo-nextest &> /dev/null; then \
                     echo 'Installing cargo-nextest...'; \
                     curl -LsSf https://get.nexte.st/latest/mac | tar zxf - -C $HOME/bin || cargo install cargo-nextest --locked; \

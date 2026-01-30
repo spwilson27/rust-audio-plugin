@@ -10,7 +10,7 @@ use test_e2e::*;
 async fn test_audio_selection_ui() -> Result<()> {
     // 1. Spawn Example
     let root = manifest_dir().parent().unwrap().to_path_buf();
-    let guard = spawn_example(&root, "audio_selection", &["--debug-server"])?;
+    let guard = spawn_example(&root, "gui", "audio_selection", &["--debug-server"])?;
 
     // 2. Connect RPC
     let lock_path = wait_for_lockfile(guard.id(), Duration::from_secs(10)).await?;

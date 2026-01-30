@@ -1,7 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use gui::widgets::{Dropdown, Label, Widget};
-use pal::{App, NativeWindow, UIEvent};
+use pal::{
+    audio::{AudioBackend, AudioStream, DeviceInfo, StreamConfig},
+    App, NativeWindow, UIEvent,
+};
 use standalone::audio;
 // unused imports removed
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -24,6 +27,55 @@ impl<'a> raw_window_handle::HasDisplayHandle for WindowHandleWrapper<'a> {
                 raw_window_handle::DisplayHandle::borrow_raw(self.0.get_raw_display_handle())
             },
         )
+    }
+}
+
+struct MockAudioStream;
+impl AudioStream for MockAudioStream {
+    fn play(&self) -> Result<()> {
+        Ok(())
+    }
+    fn pause(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
+struct MockAudioBackend;
+impl AudioBackend for MockAudioBackend {
+    fn enumerate_input_devices(&self) -> Vec<DeviceInfo> {
+        vec![]
+    }
+    fn enumerate_output_devices(&self) -> Vec<DeviceInfo> {
+        vec![
+            DeviceInfo {
+                name: "Speakers".to_string(),
+                id: "mock-speakers".to_string(),
+            },
+            DeviceInfo {
+                name: "Headphones 1".to_string(),
+                id: "mock-hp-1".to_string(),
+            },
+            DeviceInfo {
+                name: "Headphones 2".to_string(),
+                id: "mock-hp-2".to_string(),
+            },
+        ]
+    }
+    fn create_input_stream(
+        &self,
+        _device_id: &str,
+        _config: &StreamConfig,
+        _callback: Box<dyn FnMut(&[f32]) + Send>,
+    ) -> Result<Box<dyn AudioStream>> {
+        Ok(Box::new(MockAudioStream))
+    }
+    fn create_output_stream(
+        &self,
+        _device_id: &str,
+        _config: &StreamConfig,
+        _callback: Box<dyn FnMut(&mut [f32]) + Send>,
+    ) -> Result<Box<dyn AudioStream>> {
+        Ok(Box::new(MockAudioStream))
     }
 }
 
@@ -53,8 +105,9 @@ fn main() -> Result<()> {
     let mut renderer =
         gui::Renderer::new(&window_handle, 600, 400).context("Failed to init renderer")?;
 
-    // Audio Host
-    let mut audio_host = audio::StandaloneAudioHost::new().context("Failed to init audio")?;
+    // Audio Host with Mock Backend
+    let mut audio_host = audio::StandaloneAudioHost::new_with_backend(Box::new(MockAudioBackend))
+        .context("Failed to init audio")?;
 
     // UI Setup
     let mut widgets = gui::widgets::container::WidgetContainer::new();

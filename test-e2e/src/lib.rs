@@ -131,10 +131,15 @@ pub fn spawn_standalone(root_dir: &Path, args: &[&str]) -> Result<ProcessGuard> 
 }
 
 /// Spawn standalone example in background
-pub fn spawn_example(root_dir: &Path, example: &str, args: &[&str]) -> Result<ProcessGuard> {
+pub fn spawn_example(
+    root_dir: &Path,
+    package: &str,
+    example: &str,
+    args: &[&str],
+) -> Result<ProcessGuard> {
     let mut cmd = Command::new("cargo");
     cmd.current_dir(root_dir)
-        .args(["run", "-p", "standalone", "--example", example, "--"]);
+        .args(["run", "-p", package, "--example", example, "--"]);
 
     cmd.args(args);
 

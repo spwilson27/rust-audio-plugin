@@ -31,6 +31,7 @@ The VM requires the following tools installed (e.g., in `~/bin` or standard PATH
    - **Enable SSH**: System Settings -> General -> Sharing -> Enable **Remote Login**
    - **Automatic Login**: System Settings -> Users & Groups -> Automatically login as `admin` (or see [Apple Support](https://support.apple.com/en-us/102316))
    - Install the Vulkan SDK
+   - Install cmake: `brew install cmake`
 
 ## Usage
 

@@ -49,6 +49,10 @@ impl StandaloneAudioHost {
         #[cfg(not(feature = "cpal"))]
         let backend = anyhow::bail!("No audio backend enabled");
 
+        Self::new_with_backend(backend)
+    }
+
+    pub fn new_with_backend(backend: Box<dyn AudioBackend>) -> Result<Self> {
         let (tx, _rx) = crossbeam_channel::unbounded(); // Placeholder
 
         Ok(Self {

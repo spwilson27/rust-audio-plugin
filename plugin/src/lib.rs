@@ -145,10 +145,29 @@ pub mod vst3 {
     }
 
     impl IAudioProcessor for SplugPlugin {
-        unsafe fn set_bus_arrangements(&self, _inputs: *mut SpeakerArrangement, _num_ins: i32, _outputs: *mut SpeakerArrangement, _num_outs: i32) -> tresult { 
+        unsafe fn set_bus_arrangements(&self, _inputs: *mut SpeakerArrangement, num_ins: i32, outputs: *mut SpeakerArrangement, num_outs: i32) -> tresult { 
+            // We only support 0 inputs and 1 output (Stereo)
+            if num_ins == 0 && num_outs == 1 {
+                // Check if the requested output arrangement is Stereo
+                if *outputs == kStereo {
+                    return kResultOk;
+                }
+            }
             kResultFalse 
         }
-        unsafe fn get_bus_arrangement(&self, _dir: BusDirection, _index: i32, _arr: *mut SpeakerArrangement) -> tresult { kNotImplemented }
+
+        unsafe fn get_bus_arrangement(&self, dir: BusDirection, index: i32, arr: *mut SpeakerArrangement) -> tresult {
+            if dir == BusDirections::kOutput as i32 && index == 0 {
+                *arr = kStereo;
+                return kResultOk;
+            }
+            if dir == BusDirections::kInput as i32 {
+                // We have no audio inputs
+                return kResultFalse;
+            }
+            kInvalidArgument
+        }
+
         unsafe fn can_process_sample_size(&self, _symbolic_sample_size: i32) -> tresult { kResultTrue }
         unsafe fn get_latency_samples(&self) -> u32 { 0 }
         unsafe fn setup_processing(&self, _setup: *const ProcessSetup) -> tresult { 
